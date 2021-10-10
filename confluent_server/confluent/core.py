@@ -250,6 +250,10 @@ def _init_core():
                     'pluginattrs': ['hardwaremanagement.method'],
                     'default': 'ipmi',
                 }),
+                'ports': PluginCollection({
+                    'pluginattrs': ['hardwaremanagement.method'],
+                    'default': 'snmp',
+                }),
                 'reset': PluginRoute({
                     'pluginattrs': ['hardwaremanagement.method'],
                     'default': 'ipmi',
@@ -410,6 +414,30 @@ def _init_core():
                             'default': 'ipmi',
                     }),
                 },
+            },
+            'fan': {
+                'all': PluginCollection({
+                    'pluginattrs': ['hardwaremanagement.method'],
+                    'default': 'snmp',
+                }),
+            },
+            'slots': {
+                'all': PluginCollection({
+                    'pluginattrs': ['hardwaremanagement.method'],
+                    'default': 'snmp',
+                }),
+            },
+            'lldp': {
+                'all': PluginCollection({
+                    'pluginattrs': ['hardwaremanagement.method'],
+                    'default': 'snmp',
+                }),
+            },
+            'bridge': {
+                'all': PluginCollection({
+                    'pluginattrs': ['hardwaremanagement.method'],
+                    'default': 'snmp',
+                }),
             },
         },
         'media': {
