@@ -229,6 +229,10 @@ def _init_core():
                         'pluginattrs': ['hardwaremanagement.method'],
                         'default': 'ipmi',
                     }),
+                    'users': PluginCollection({
+                        'pluginattrs': ['hardwaremanagement.method'],
+                        'default': 'cim',
+                    }),
                 },
                 'clear': PluginRoute({
                         'pluginattrs': ['hardwaremanagement.method'],

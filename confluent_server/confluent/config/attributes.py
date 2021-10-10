@@ -398,6 +398,14 @@ node = {
                        'traffic. This only has effect during OS deployment '
                        'and does not apply to out of band discovery.',
     },
+    'hardwaremanagement.deviceId': {
+        'description': 'The deviceId used to connect to storage device.',
+    },
+    'hardwaremanagement.type': {
+        'description': 'device type, '
+                       'different type of device may have different interfaces '
+                       'used to know how to interact with device.',
+    },
     'enclosure.bay': {
          'description': 'The bay in the enclosure, if any',
 #        'appliesto': ['system'],
