@@ -398,14 +398,6 @@ node = {
                        'traffic. This only has effect during OS deployment '
                        'and does not apply to out of band discovery.',
     },
-    'hardwaremanagement.deviceId': {
-        'description': 'The deviceId used to connect to storage device.',
-    },
-    'hardwaremanagement.type': {
-        'description': 'device type, '
-                       'different type of device may have different interfaces '
-                       'used to know how to interact with device.',
-    },
     'enclosure.bay': {
          'description': 'The bay in the enclosure, if any',
 #        'appliesto': ['system'],
@@ -540,33 +532,7 @@ node = {
         'description': ('SNMPv1 community string, it is highly recommended to'
                         'step up to SNMPv3'),
     },
-    # snmp parameters for switch/server/firewall
-    'secret.hardwaremanagement.snmp.version': {
-        'description': 'The snmp version',
-    },
-    'secret.hardwaremanagement.snmp.community': {
-        'description': 'The snmp v1/v2c community',
-    },
-    'secret.hardwaremanagement.snmpv3.user': {
-        'description': 'The snmpv3 user name',
-    },
-    'secret.hardwaremanagement.snmpv3.authpass': {
-        'description': 'The snmpv3 authentication protocol pass phrase',
-    },
-    'secret.hardwaremanagement.snmpv3.authproto': {
-        'description': 'The snmpv3 authentication protocol (MD5|SHA)',
-    },
-    'secret.hardwaremanagement.snmpv3.privpass': {
-        'description': 'The snmpv3 privacy protocol pass phrase',
-    },
-    'secret.hardwaremanagement.snmpv3.privproto': {
-        'description': 'The snmpv3 privacy protocol (DES|AES)',
-    },
-    'secret.hardwaremanagement.snmpv3.seclevel': {
-        'description': ('The snmpv3 security level: '
-                        'noAuthNoPriv|authNoPriv|authPriv'),
-    },
-    #    'secret.snmplocalizedkey': {
+#    'secret.snmplocalizedkey': {
 #        'description': ("SNMPv3 key localized to this node's SNMP Engine id"
 #                        'This can be used in lieu of snmppassphrase to avoid'
 #                        'retaining the passphrase TODO: document procedure'
