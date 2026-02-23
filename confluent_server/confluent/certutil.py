@@ -1,4 +1,10 @@
 import os
+if __name__ == '__main__':
+    import sys
+    path = os.path.dirname(os.path.realpath(__file__))
+    path = os.path.realpath(os.path.join(path, '..'))
+    if path.startswith('/opt'):
+        sys.path.append(path)
 import confluent.collective.manager as collective
 import confluent.util as util
 from os.path import exists
@@ -444,6 +450,7 @@ def create_certificate(keyout=None, certout=None, csrfile=None, subj=None, san=N
 
 if __name__ == '__main__':
     import sys
+    import ipaddress
     outdir = os.getcwd()
     keyout = os.path.join(outdir, 'key.pem')
     certout = os.path.join(outdir, 'cert.pem')
@@ -458,6 +465,20 @@ if __name__ == '__main__':
         subj, san = util.get_bmc_subject_san(c, bmcnode)
     except ValueError:
         bindex = None
+    if subj is None:
+        try:
+            sans = set()
+            sindex = sys.argv.index('-s')
+            subj = sys.argv.pop(sindex + 1)  # Remove subject argument
+            sys.argv.pop(sindex)      # Remove -s flag
+            try:
+                ipaddress.ip_address(subj)
+                sans.add('IP:{0}'.format(subj))
+            except ValueError:
+                sans.add('DNS:{0}'.format(subj))
+            san = ','.join(sans) if sans else None
+        except ValueError:
+            pass
     try:
         csrout = sys.argv[1]
     except IndexError:
