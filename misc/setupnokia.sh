@@ -26,12 +26,13 @@ chmod 700 "$ASKPASS_SCRIPT"
 # Set SSH_ASKPASS environment variable
 export SSH_ASKPASS="$ASKPASS_SCRIPT"
 export SSH_ASKPASS_REQUIRE=force
+export DISPLAY=none
 
 CERTDIR=$(mktemp -d)
 trap "rm -rf $CERTDIR" EXIT
 cd "$CERTDIR"
 python3 /opt/confluent/lib/python/confluent/certutil.py -s "$SWITCHNAME"
-ssh $SWITCHUSER@"$SWITCHNAME" <<EOC
+setsid ssh $SWITCHUSER@"$SWITCHNAME" <<EOC
 enter candidate exclusive
 / system json-rpc-server admin-state enable
 / system tls server-profile fullcert key "$(<$CERTDIR/key.pem)"
