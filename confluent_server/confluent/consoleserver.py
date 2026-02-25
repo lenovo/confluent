@@ -392,7 +392,7 @@ class ConsoleHandler(object):
             self.resize(width=self.initsize[0], height=self.initsize[1])
             await self._console.connect(self.get_console_output)
         except exc.TargetEndpointBadCredentials:
-            self.clearbuffer()
+            await self.clearbuffer()
             self.error = 'badcredentials'
             self.connectstate = 'unconnected'
             await self._send_rcpts({'connectstate': self.connectstate,
