@@ -124,16 +124,15 @@ class VmwApiClient:
             self.password = self.password.decode()
         except Exception:
             pass
-        self.wc = webclient.Web(vcsa, port=443, verifycallback=cv)
+        self.wc = webclient.WebConnection(vcsa, port=443, verifycallback=cv)
         self.logged = False
         self.vmlist = {}
         self.vmbyid = {}
 
-    def login(self):
+    async def login(self):
         self.wc.set_basic_credentials(self.user, self.password)
-        self.wc.request('POST', '/api/session')
-        rsp = self.wc.getresponse()
-        body = rsp.read().decode().replace('"', '')
+        rsp = await self.wc.grab_json_response_with_status('/api/session', method='POST')
+        body = rsp[0]
         del self.wc.stdheaders['Authorization']
         self.wc.set_header('vmware-api-session-id', body)
         self.logged = True
@@ -141,13 +140,15 @@ class VmwApiClient:
     async def get_screenshot(self, vm, outfile):
         if not self.logged:
             await self.login()
-        vm = self.index_vm(vm)
+        vm = await self.index_vm(vm)
         url = f'/screen?id={vm}'
-        wc = self.wc.dupe()
-        wc.set_basic_credentials(self.user, self.password)
-        fd = webclient.FileDownloader(wc, url, outfile)
-        fd.start()
-        fd.join()
+        self.wc.set_basic_credentials(self.user, self.password)
+        try:
+            data, status, headers = await self.wc.grab_response_with_status(url)
+            if status == 200:
+                outfile.write(data)
+        finally:
+            del self.wc.stdheaders['Authorization']
 
     async def list_vms(self):
         if not self.logged:
@@ -252,7 +253,7 @@ class VmwApiClient:
         rsp = await self.wc.grab_json_response_with_status(f'/api/vcenter/vm/{vm}/hardware/boot')
         if rsp[0]['enter_setup_mode']:
             return 'setup'
-        rsp = self.wc.grab_json_response_with_status(f'/api/vcenter/vm/{vm}/hardware/boot/device')
+        rsp = await self.wc.grab_json_response_with_status(f'/api/vcenter/vm/{vm}/hardware/boot/device')
         try:
             if rsp[0][0]['type'] == 'ETHERNET':
                 return 'network'
@@ -353,7 +354,7 @@ async def retrieve(nodes, element, configmanager, inputdata):
         elif element == ['console', 'ikvm_screenshot']:
             # good background for the webui, and kitty
             imgdata = RetainedIO()
-            imgformat = currclient.get_screenshot(node, imgdata)
+            imgformat = await currclient.get_screenshot(node, imgdata)
             imgdata = imgdata.getvalue()
             if imgdata:
                 yield msg.ScreenShot(imgdata, node, imgformat=imgformat)
@@ -363,22 +364,22 @@ async def retrieve(nodes, element, configmanager, inputdata):
 
 
 
-def update(nodes, element, configmanager, inputdata):
+async def update(nodes, element, configmanager, inputdata):
     clientsbynode = prep_vcsa_clients(nodes, configmanager)
     for node in nodes:
         currclient = clientsbynode[node]
         if element == ['power', 'state']:
-            newstate, oldstate = currclient.set_vm_power(node, inputdata.powerstate(node))
+            newstate, oldstate = await currclient.set_vm_power(node, inputdata.powerstate(node))
             yield  msg.PowerState(node, newstate, oldstate)
         elif element == ['boot', 'nextdevice']:
-            currclient.set_vm_bootdev(node, inputdata.bootdevice(node))
-            yield msg.BootDevice(node, currclient.get_vm_bootdev(node))
+            await currclient.set_vm_bootdev(node, inputdata.bootdevice(node))
+            yield msg.BootDevice(node, await currclient.get_vm_bootdev(node))
 
 # assume this is only console for now
-def create(nodes, element, configmanager, inputdata):
+async def create(nodes, element, configmanager, inputdata):
     clientsbynode = prep_vcsa_clients(nodes, configmanager)
     for node in nodes:
-        serialdata = clientsbynode[node].get_vm_serial(node)
+        serialdata = await clientsbynode[node].get_vm_serial(node)
         yield VmConsole(serialdata['server'], serialdata['port'], serialdata['tls'], configmanager)
         return
 
