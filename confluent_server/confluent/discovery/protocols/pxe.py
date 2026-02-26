@@ -569,7 +569,7 @@ def get_deployment_profile(node, cfg, cfd=None):
 
 staticassigns = {}
 myipbypeer = {}
-def check_reply(node, info, packet, sock, cfg, reqview, addr, requestor):
+async def check_reply(node, info, packet, sock, cfg, reqview, addr, requestor):
     if not requestor:
         requestor = ('0.0.0.0', None)
     if requestor[0] == '0.0.0.0' and not info.get('uuid', None):
@@ -590,16 +590,16 @@ def check_reply(node, info, packet, sock, cfg, reqview, addr, requestor):
         if packet['vci'] and packet['vci'].startswith('PXEClient'):
             log.log({'info': 'IPv6 PXE boot attempt by {0}, but IPv6 PXE is not supported, try IPv6 HTTP boot or IPv4 boot'.format(node)})
             return
-        return reply_dhcp6(node, addr, cfg, packet, cfd, profile, sock)
+        return await reply_dhcp6(node, addr, cfg, packet, cfd, profile, sock)
     else:
-        return reply_dhcp4(node, info, packet, cfg, reqview, httpboot, cfd, profile, sock, requestor)
+        return await reply_dhcp4(node, info, packet, cfg, reqview, httpboot, cfd, profile, sock, requestor)
 
-def reply_dhcp6(node, addr, cfg, packet, cfd, profile, sock):
-    myaddrs = netutil.get_my_addresses(addr[-1], socket.AF_INET6)
+async def reply_dhcp6(node, addr, cfg, packet, cfd, profile, sock):
+    myaddrs = await netutil.get_my_addresses(addr[-1], socket.AF_INET6)
     if not myaddrs:
         log.log({'info': 'Unable to provide IPv6 boot services to {0}, no viable IPv6 configuration on interface index "{1}" to respond through.'.format(node, addr[-1])})
         return
-    niccfg = netutil.get_nic_config(cfg, node, ifidx=addr[-1], onlyfamily=socket.AF_INET6)
+    niccfg = await netutil.get_nic_config(cfg, node, ifidx=addr[-1], onlyfamily=socket.AF_INET6)
     ipv6addr = niccfg.get('ipv6_address', None)
     ipv6prefix = niccfg.get('ipv6_prefix', None)
     ipv6method = niccfg.get('ipv6_method', 'static')
@@ -679,7 +679,7 @@ def get_my_duid():
 
 _recent_txids = {}
 
-def reply_dhcp4(node, info, packet, cfg, reqview, httpboot, cfd, profile, sock=None, requestor=None):
+async def reply_dhcp4(node, info, packet, cfg, reqview, httpboot, cfd, profile, sock=None, requestor=None):
     replen = 275  # default is going to be 286
     # while myipn is describing presumed destination, it's really
     # vague in the face of aliases, need to convert to ifidx and evaluate
@@ -724,7 +724,7 @@ def reply_dhcp4(node, info, packet, cfg, reqview, httpboot, cfd, profile, sock=N
         relayipa = socket.inet_ntoa(relayip)
     gateway = None
     netmask = None
-    niccfg = netutil.get_nic_config(cfg, node, ifidx=info['netinfo']['ifidx'], relayipn=relayip, onlyfamily=socket.AF_INET)
+    niccfg = await netutil.get_nic_config(cfg, node, ifidx=info['netinfo']['ifidx'], relayipn=relayip, onlyfamily=socket.AF_INET)
     nicerr = niccfg.get('error_msg', False)
     if nicerr:
         log.log({'error': nicerr})

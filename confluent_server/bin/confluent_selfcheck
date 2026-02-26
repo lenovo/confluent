@@ -366,7 +366,7 @@ async def main():
         for nic in glob.glob("/sys/class/net/*/ifindex"):
             idx = int(open(nic, "r").read())
             nicname = nic.split('/')[-2]
-            ncfg = netutil.get_nic_config(cfg, args.node, ifidx=idx)
+            ncfg = await netutil.get_nic_config(cfg, args.node, ifidx=idx)
             if ncfg['ipv4_address']:
                 targsships.append(ncfg['ipv4_address'])
             if ncfg['ipv4_address'] or ncfg['ipv4_method'] == 'dhcp':

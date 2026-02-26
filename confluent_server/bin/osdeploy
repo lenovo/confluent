@@ -173,7 +173,7 @@ async def local_node_trust_setup():
     myprincipals.add(myshortname)
     if domain:
         myprincipals.add('{0}.{1}'.format(myshortname, domain))
-    for addr in netutil.get_my_addresses():
+    for addr in await netutil.get_my_addresses():
         addr = socket.inet_ntop(addr[0], addr[1])
         myprincipals.add(addr)
     for pubkey in glob.glob('/etc/ssh/ssh_host_*_key.pub'):

@@ -39,10 +39,10 @@ libc = ctypes.CDLL(ctypes.util.find_library('c'))
 # 128, len, len, key - sealed key
 
 
-def address_is_somewhat_trusted(address, nodename, cfm):
-    if netutil.ip_on_same_subnet(address.split('%')[0], 'fe80::', 64):
+async def address_is_somewhat_trusted(address, nodename, cfm):
+    if await netutil.ip_on_same_subnet(address.split('%')[0], 'fe80::', 64):
         return True
-    if netutil.address_is_local(address):
+    if await netutil.address_is_local(address):
         return True
     authnets = cfm.get_node_attributes(nodename, 'trusted.subnets')
     authnets = authnets.get(nodename, {}).get('trusted.subnets', {}).get('value', None)
@@ -51,7 +51,7 @@ def address_is_somewhat_trusted(address, nodename, cfm):
             for anet in authnet.split():
                 na, plen = anet.split('/')
                 plen = int(plen)
-                if netutil.ip_on_same_subnet(address, na, plen):
+                if await netutil.ip_on_same_subnet(address, na, plen):
                     return True
     return False
 
@@ -85,7 +85,7 @@ class CredServer(object):
             apiarmed = apimats.get(nodename, {}).get('deployment.apiarmed', {}).get(
                     'value', None)
             if not hmackey:
-                if not address_is_somewhat_trusted(peer[0], nodename, self.cfm):
+                if not await address_is_somewhat_trusted(peer[0], nodename, self.cfm):
                     client.close()
                     return
                 if not apiarmed:

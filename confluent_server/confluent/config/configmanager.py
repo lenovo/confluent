@@ -1097,12 +1097,12 @@ def get_collective_member(name):
     return _cfgstore.get('collective', {}).get(name, None)
 
 
-def get_collective_member_by_address(address):
+async def get_collective_member_by_address(address):
     if _cfgstore is None:
         init()
     for name in _cfgstore.get('collective', {}):
         currdrone = _cfgstore['collective'][name]
-        if netutil.addresses_match(address, currdrone['address']):
+        if await netutil.addresses_match(address, currdrone['address']):
             return currdrone
 
 

@@ -74,6 +74,13 @@ class TaskPool:
         self._tasks.add(currtask)
         currtask.add_done_callback(self._done_callback)
         return tholder
+    
+    async def waitall(self):
+        while self._tasks or self._pending:
+            if self._tasks:
+                done, _ = await asyncio.wait(self._tasks, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    self._tasks.discard(task)
 
 tasksitter = None
 logtrace = None

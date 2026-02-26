@@ -53,10 +53,10 @@ async def create_ident_image(node, configmanager):
     # restricted by 'managercandidates'
     ident['deploy_servers'] = []
     ident['confluent_uuid'] = cfm.get_global('confluent_uuid')
-    for myaddr in netutil.get_my_addresses():
+    for myaddr in await netutil.get_my_addresses():
         myaddr = socket.inet_ntop(myaddr[0], myaddr[1])
         ident['deploy_servers'].append(myaddr)
-    ident['net_cfgs'] = netutil.get_flat_net_config(configmanager, node)
+    ident['net_cfgs'] = await netutil.get_flat_net_config(configmanager, node)
     with open(os.path.join(tmpd, 'cnflnt.yml'), 'w') as yamlout:
         yaml.safe_dump(ident, yamlout, default_flow_style=False)
     with open(os.path.join(tmpd, 'cnflnt.jsn'), 'w') as jsonout:

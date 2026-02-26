@@ -117,7 +117,7 @@ class NodeHandler(bmchandler.NodeHandler):
                 'ifConfig').find('v4IPAddr').text
             if currip == smmip:
                 return
-            netconfig = netutil.get_nic_config(cfg, nodename, ip=smmip)
+            netconfig = await netutil.get_nic_config(cfg, nodename, ip=smmip)
             netmask = netutil.cidr_to_mask(netconfig['prefix'])
             setdata = 'set=ifIndex:0,v4DHCPEnabled:0,v4IPAddr:{0},v4NetMask:{1}'.format(smmip, netmask)
             gateway = netconfig.get('ipv4_gateway', None)

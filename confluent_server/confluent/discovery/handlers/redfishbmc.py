@@ -300,8 +300,8 @@ class NodeHandler(generic.NodeHandler):
                 else:
                     raise Exception("Unable to detect active NIC of multi-nic bmc")
                 actualnics = [actualnic]
-            currnet = wc.grab_json_response(actualnics[0])
-            netconfig = netutil.get_nic_config(self.configmanager, nodename, ip=newip)
+            currnet = await wc.grab_json_response(actualnics[0])
+            netconfig = await netutil.get_nic_config(self.configmanager, nodename, ip=newip)
             newconfig = {
                 "Address": newip,
                 "SubnetMask": netutil.cidr_to_mask(netconfig['prefix']),

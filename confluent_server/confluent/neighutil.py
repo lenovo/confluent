@@ -101,7 +101,7 @@ async def get_hwaddr(ipaddr):
             await _update_neigh()
             updated = True
         hwaddr = neightable.get(ipaddr, None)
-        if not hwaddr and not netutil.ipn_is_local(ipaddr):
+        if not hwaddr and not await netutil.ipn_is_local(ipaddr):
             hwaddr = False
         if hwaddr == None and not updated:
             await _update_neigh()

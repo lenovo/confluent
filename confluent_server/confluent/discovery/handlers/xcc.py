@@ -619,11 +619,11 @@ class NodeHandler(immhandler.NodeHandler):
             newip = newipinfo[-1][0]
             if ':' in newip:
                 raise exc.NotImplementedException('IPv6 remote config TODO')
-            netconfig = netutil.get_nic_config(self.configmanager, nodename, ip=targbmc)
+            netconfig = await netutil.get_nic_config(self.configmanager, nodename, ip=targbmc)
             newmask = netutil.cidr_to_mask(netconfig['prefix'])
             currinfo = await wc.grab_json_response('/api/providers/logoninfo')
             currip = currinfo.get('items', [{}])[0].get('ipv4_address', '')
-            curreth1 = wc.grab_json_response('/api/dataset/imm_ethernet')
+            curreth1 = await wc.grab_json_response('/api/dataset/imm_ethernet')
             if curreth1:
                 if self.ipaddr.startswith('fe80::'):
                     ipkey = 'ipv6_link_local_address'
@@ -634,7 +634,7 @@ class NodeHandler(immhandler.NodeHandler):
                 nic1ip = curreth1.get('items', [{}])[0].get(ipkey, None)
                 if nic1ip != self.ipaddr:
                     # check second nic instead
-                    curreth2 = wc.grab_json_response('/api/dataset/imm_ethernet_2')
+                    curreth2 = await wc.grab_json_response('/api/dataset/imm_ethernet_2')
                     if curreth2 and curreth2.get('items', [{}])[0].get('if_second_port_exist', 0):
                         nic2ip = curreth2.get('items', [{}])[0].get(ipkey + '_2', None)
                         if nic2ip != self.ipaddr:
@@ -650,7 +650,7 @@ class NodeHandler(immhandler.NodeHandler):
                     }
                 if netconfig['ipv4_gateway']:
                     statargs['ENET_IPv4GatewayIPAddr'] = netconfig['ipv4_gateway']
-                elif not netutil.address_is_local(newip):
+                elif not await netutil.address_is_local(newip):
                     raise exc.InvalidArgumentException('Will not remotely configure a device with no gateway')
                 if attribsuffix:
                     for currkey in list(statargs):

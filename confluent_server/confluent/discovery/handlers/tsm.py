@@ -212,7 +212,7 @@ class NodeHandler(generic.NodeHandler):
                 if net['channel_number'] == self.channel:
                     # we have found the interface to potentially manipulate
                     if net['ipv4_address'] != newip:
-                        netconfig = netutil.get_nic_config(self.configmanager, nodename, ip=newip)
+                        netconfig = await netutil.get_nic_config(self.configmanager, nodename, ip=newip)
                         newmask = netutil.cidr_to_mask(netconfig['prefix'])
                         net['ipv4_address'] = newip
                         net['ipv4_subnet'] = newmask

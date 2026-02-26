@@ -51,7 +51,7 @@ def listdump(input):
     return retval
 
 
-def get_extra_names(nodename, cfg, myip=None, preferadjacent=False, addlocalhost=True):
+async def get_extra_names(nodename, cfg, myip=None, preferadjacent=False, addlocalhost=True):
     if addlocalhost:
         names = set(['127.0.0.1', '::1', 'localhost', 'localhost.localdomain'])
     else:
@@ -71,8 +71,8 @@ def get_extra_names(nodename, cfg, myip=None, preferadjacent=False, addlocalhost
                     if domain and domain not in currname:
                         names.add('{0}.{1}'.format(currname, domain))
     if myip:
-        ncfgs = [netutil.get_nic_config(cfg, nodename, serverip=myip)]
-        fncfg = netutil.get_full_net_config(cfg, nodename, serverip=myip)
+        ncfgs = [await netutil.get_nic_config(cfg, nodename, serverip=myip)]
+        fncfg = await netutil.get_full_net_config(cfg, nodename, serverip=myip)
         ncfgs.append(fncfg.get('default', {}))
         for ent in fncfg.get('extranets', []):
             ncfgs.append(fncfg['extranets'][ent])
@@ -82,7 +82,7 @@ def get_extra_names(nodename, cfg, myip=None, preferadjacent=False, addlocalhost
             for nip in (ncfg.get('ipv4_address', None), ncfg.get('ipv6_address', None)):
                 if nip:
                     nip = nip.split('/', 1)[0]
-                    if not preferadjacent or netutil.address_is_local(nip):
+                    if not preferadjacent or await netutil.address_is_local(nip):
                         names.add(nip)
                         addall = False
                     else:
@@ -266,7 +266,7 @@ async def handle_request(req, make_response, mimetype):
         bmcaddr = await asyncio.get_event_loop().getaddrinfo(bmcaddr, 0)[0]
         bmcaddr = bmcaddr[-1][0]
         if '.' in bmcaddr:  # ipv4 is allowed
-            netconfig = netutil.get_nic_config(cfg, nodename, ip=bmcaddr)
+            netconfig = await netutil.get_nic_config(cfg, nodename, ip=bmcaddr)
             res['bmcipv4'] = bmcaddr
             res['prefixv4'] = netconfig['prefix']
             res['bmcgw'] = netconfig.get('ipv4_gateway', None)
@@ -285,7 +285,7 @@ async def handle_request(req, make_response, mimetype):
         mrsp = await make_response(mimetype, 200, 'OK')
         await mrsp.write(dumper(rsp))
     elif reqpath == '/self/netcfg':
-        ncfg = netutil.get_full_net_config(cfg, nodename, myip)
+        ncfg = await netutil.get_full_net_config(cfg, nodename, myip)
         mrsp = await make_response(mimetype, 200, 'OK')
         await mrsp.write(dumper(ncfg))
     elif reqpath in ('/self/deploycfg', '/self/deploycfg2'):
@@ -296,9 +296,9 @@ async def handle_request(req, make_response, mimetype):
             except ValueError:
                 with open('/sys/class/net/{}/ifindex'.format(nicname), 'r') as nici:
                     ifidx = int(nici.read())
-            ncfg = netutil.get_nic_config(cfg, nodename, ifidx=ifidx)
+            ncfg = await netutil.get_nic_config(cfg, nodename, ifidx=ifidx)
         else:
-            ncfg = netutil.get_nic_config(cfg, nodename, serverip=myip, clientip=clientip)
+            ncfg = await netutil.get_nic_config(cfg, nodename, serverip=myip, clientip=clientip)
         if reqpath == '/self/deploycfg':
             for key in list(ncfg):
                 if 'v6' in key:
@@ -429,12 +429,12 @@ async def handle_request(req, make_response, mimetype):
             mrsp = await make_response(mimetype, 500, 'Unconfigured')
             await msrp.write(b'CA is not configured on this system (run ...)')
             return mrsp
-        pals = get_extra_names(nodename, cfg, myip)
+        pals = await get_extra_names(nodename, cfg, myip)
         cert = sshutil.sign_host_key(reqbody, nodename, pals)
         mrsp = await make_response('text/plain', 200, 'OK')
         await mrsp.write(cert)
     elif reqpath == '/self/nodelist':
-        nodes, _ = get_cluster_list(nodename, cfg)
+        nodes, _ = await get_cluster_list(nodename, cfg)
         if isgeneric:
             mrsp = await make_response('text/plain', 200, 'OK')
             for node in util.natural_sort(nodes):
@@ -538,7 +538,7 @@ async def handle_request(req, make_response, mimetype):
             return
     elif reqpath.startswith('/self/remotesyncfiles'):
         if 'POST' == operation:
-            pals = get_extra_names(nodename, cfg, myip, preferadjacent=True, addlocalhost=False)
+            pals = await get_extra_names(nodename, cfg, myip, preferadjacent=True, addlocalhost=False)
             if clientip in pals:
                 pals = [clientip]
             result = syncfiles.start_syncfiles(
@@ -622,7 +622,7 @@ def get_scriptlist(scriptcat, cfg, nodename, pathtemplate):
     return slist, profile
 
 
-def get_cluster_list(nodename=None, cfg=None):
+async def get_cluster_list(nodename=None, cfg=None):
     if cfg is None:
         cfg = configmanager.ConfigManager(None)
     nodes = None
@@ -642,7 +642,7 @@ def get_cluster_list(nodename=None, cfg=None):
             domaininfo = cfg.get_node_attributes(node, 'dns.domain')
             domain = domaininfo.get(node, {}).get('dns.domain', {}).get(
                 'value', None)
-        for extraname in get_extra_names(node, cfg):
+        for extraname in await get_extra_names(node, cfg):
             nodes.add(extraname)
     if autonodes:
         for mgr in configmanager.list_collective():

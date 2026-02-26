@@ -162,7 +162,7 @@ class NodeHandler(generic.NodeHandler):
             newip = newipinfo[-1][0]
             if ':' in newip:
                 raise exc.NotImplementedException('IPv6 remote config TODO')
-            netconfig = netutil.get_nic_config(cfg, nodename, ip=newip)
+            netconfig = await netutil.get_nic_config(cfg, nodename, ip=newip)
             plen = netconfig['prefix']
             newip = '{0}/{1}'.format(newip, plen)
             currcfg = ic.get_net_configuration()
