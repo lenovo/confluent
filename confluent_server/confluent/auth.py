@@ -305,12 +305,6 @@ async def check_user_passphrase(name, passphrase, operation=None, element=None, 
         # throw it at the worker pool when implemented
         # maybe a distinct worker pool, wondering about starving out non-auth stuff
         salt, crypt = ucfg['cryptpass']
-        # execute inside tpool to get greenthreads to give it a special thread
-        # world
-        # TODO(jbjohnso): util function to generically offload a call
-        # such a beast could be passed into pyghmi as a way for pyghmi to
-        # magically get offload of the crypto functions without having
-        # to explicitly get into the eventlet tpool game
         global authworkers
         global authcleaner
         if authworkers is None:

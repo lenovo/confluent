@@ -22,8 +22,8 @@
 #  - One power supply is off.
 
 import re
-import eventlet
-import eventlet.queue as queue
+import asyncio
+import confluent.tasks as tasks
 import confluent.exceptions as exc
 import confluent.messages as msg
 import confluent.util as util
@@ -44,8 +44,8 @@ def _run_method(method, workers, results, configmanager, nodes, element):
                 nodes, ["switchuser", "switchpass", "secret.hardwaremanagementpassword",
                         "secret.hardwaremanagementuser"], decrypt=True)
         for node in nodes:
-            workers.add(eventlet.spawn(method, configmanager, creds,
-                                       node, results, element))
+            workers.add(tasks.spawn(method(configmanager, creds,
+                                       node, results, element)))
 
 
 def enos_login(node, configmanager, creds):
@@ -91,7 +91,7 @@ def create(nodes, element, configmanager, inputdata):
 
 
 def retrieve(nodes, element, configmanager, inputdata):
-    results = queue.LightQueue()
+    results = asyncio.Queue()
     workers = set([])
     if element == ["power", "state"]:
         for node in nodes:
@@ -112,14 +112,14 @@ def retrieve(nodes, element, configmanager, inputdata):
     currtimeout = 10
     while workers:
         try:
-            datum = results.get(10)
+            datum = await results.get()
             while datum:
                 if datum:
                     yield datum
                 datum = results.get_nowait()
-        except queue.Empty:
+        except asyncio.QueueEmpty:
             pass
-        eventlet.sleep(0.001)
+        await asyncio.sleep(0.001)
         for t in list(workers):
             if t.dead:
                 workers.discard(t)
@@ -128,7 +128,7 @@ def retrieve(nodes, element, configmanager, inputdata):
             datum = results.get_nowait()
             if datum:
                 yield datum
-    except queue.Empty:
+    except asyncio.QueueEmpty:
         pass
 
 

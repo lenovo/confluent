@@ -1404,7 +1404,7 @@ class Staging:
             raise FileNotFoundError
         return directory
 
-def handle_staging(pathcomponents, operation, configmanager, inputdata):
+async def handle_staging(pathcomponents, operation, configmanager, inputdata):
     '''
     e.g push_url: /confluent-api/staging/user/<unique_id> 
     '''
@@ -1433,10 +1433,11 @@ def handle_staging(pathcomponents, operation, configmanager, inputdata):
                 with open(file, 'wb') as f:
                     while remaining_length > 0:
                         progress = (1 - (remaining_length/content_length)) * 100
+                        #TODO: ASYNC Need to change to aiohttp approach
                         datachunk = filedata['wsgi.input'].read(min(chunk_size, remaining_length))
                         f.write(datachunk)     
                         remaining_length -= len(datachunk)
-                        eventlet.sleep(0)
+                        await asyncio.sleep(0)
                         yield msg.FileUploadProgress(progress)
                     yield msg.FileUploadProgress(100) 
                  
@@ -1552,11 +1553,11 @@ async def handle_path(path, operation, configmanager, inputdata=None, autostrip=
         if element != 'decode':
             raise exc.NotFoundException()
         if operation == 'update':
-            return alerts.decode_alert(inputdata, configmanager)
+            return await alerts.decode_alert(inputdata, configmanager)
     elif pathcomponents[0] == 'discovery':
         return handle_discovery(pathcomponents[1:], operation, configmanager,
                                 inputdata)
     elif pathcomponents[0] == 'staging':
-        return handle_staging(pathcomponents, operation, configmanager, inputdata)
+        return await handle_staging(pathcomponents, operation, configmanager, inputdata)
     else:
         raise exc.NotFoundException()

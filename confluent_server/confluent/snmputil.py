@@ -17,8 +17,8 @@
 # This provides a simplified wrapper around snmp implementation roughly
 # mapping to the net-snmp commands
 
-# net-snmp-python was considered as the API is cleaner, but the ability to
-# patch pysnmp to have it be eventlet friendly has caused it's selection
+# net-snmp-python was considered as the API is cleaner, but
+# want clean asyncio support
 # This module simplifies the complex hlapi pysnmp interface
 
 import asyncio

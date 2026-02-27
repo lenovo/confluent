@@ -1,6 +1,5 @@
 
 import asyncio
-import eventlet
 import confluent.messages as msg
 import confluent.exceptions as exc
 import struct

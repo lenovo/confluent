@@ -549,11 +549,9 @@ async def register_remote_addrs(addresses, configmanager):
         except Exception:
             return addr, False
         return addr, True
-    #rpool = eventlet.greenpool.GreenPool(512)
     for count in iterate_addrs(addresses, True):
         yield msg.ConfluentResourceCount(count)
-    return  # ASYNC
-    for result in rpool.imap(register_remote_addr, iterate_addrs(addresses)):
+    async for result in tasks.task_imap(register_remote_addr, iterate_addrs(addresses), max_concurrent=512):
         if result[1]:
             yield msg.CreatedResource(result[0])
         else:
@@ -894,7 +892,7 @@ async def detected(info):
             rechecker = tasks.spawn_task_after(300, _periodic_recheck, cfg)
         unknown_info[info['hwaddr']] = info
         info['discostatus'] = 'unidentfied'
-        #TODO, eventlet spawn after to recheck sooner, or somehow else
+        #TODO, spawn after to recheck sooner, or somehow else
         # influence periodic recheck to shorten delay?
         return
     nodename, info['maccount'] = await get_nodename(cfg, handler, info)
@@ -1715,9 +1713,7 @@ def stop_autosense():
 
 def start_autosense():
     autosensors.add(tasks.spawn_task(slp.snoop(safe_detected, slp)))
-    #autosensors.add(eventlet.spawn(mdns.snoop, safe_detected, mdns))
     tasks.spawn(pxe.snoop(safe_detected, pxe, get_node_guess_by_uuid))
-    #autosensors.add(eventlet.spawn(pxe.snoop, safe_detected, pxe, get_node_guess_by_uuid))
     tasks.spawn(remotescan())
 
 

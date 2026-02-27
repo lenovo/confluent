@@ -17,7 +17,7 @@
 # This provides the implementation of locating MAC addresses on ethernet
 # switches.  It is, essentially, a port of 'MacMap.pm' to confluent.
 # However, there are enhancements.
-# For one, each switch interrogation is handled in an eventlet 'thread'
+# For one, each switch interrogation is handled in an coroutine
 # For another, MAC addresses are checked in the dictionary on every
 # switch return, rather than waiting for all switches to check in
 # (which makes it more responsive when there is a missing or bad switch)

@@ -17,10 +17,10 @@
 
 try:
     import confluent.sshutil as sshutil
-    import eventlet
-    import eventlet.green.subprocess as subprocess
+    import confluent.tasks as tasks
 except ImportError:
     pass
+import asyncio
 import shutil
 import json
 import msgpack
@@ -40,7 +40,7 @@ class PlayRunner(object):
         self.complete = False
 
     def _start_playbooks(self):
-        self.worker = eventlet.spawn(self._really_run_playbooks)
+        self.worker = tasks.spawn(self._really_run_playbooks())
 
     def get_available_results(self):
         avail = self.results
@@ -79,7 +79,7 @@ class PlayRunner(object):
             'results': self.get_available_results()
         }
 
-    def _really_run_playbooks(self):
+    async def _really_run_playbooks(self):
         global anspypath
         try:
             mypath = anspypath
@@ -92,21 +92,21 @@ class PlayRunner(object):
                         mypath = anspypath
             if not mypath:
                 mypath = sys.executable
-            with open(os.devnull, 'w+') as devnull:
-                targnodes = ','.join(self.nodes)
-                for playfilename in self.playfiles:
-                    worker = subprocess.Popen(
-                        [mypath, __file__, targnodes, playfilename],
-                        stdin=devnull, stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE)
-                    stdout, stder = worker.communicate()
-                    self.stderr += stder.decode('utf8')
-                    current = memoryview(stdout)
-                    while len(current):
-                        sz = struct.unpack('=q', current[:8])[0]
-                        result = msgpack.unpackb(current[8:8+sz], raw=False)
-                        self.results.append(result)
-                        current = current[8+sz:]
+            targnodes = ','.join(self.nodes)
+            for playfilename in self.playfiles:
+                worker = await asyncio.create_subprocess_exec(
+                    mypath, __file__, targnodes, playfilename,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE)
+                stdout, stder = await worker.communicate()
+                self.stderr += stder.decode('utf8')
+                current = memoryview(stdout)
+                while len(current):
+                    sz = struct.unpack('=q', current[:8])[0]
+                    result = msgpack.unpackb(current[8:8+sz], raw=False)
+                    self.results.append(result)
+                    current = current[8+sz:]
         finally:
             self.complete = True
 

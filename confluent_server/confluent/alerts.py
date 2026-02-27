@@ -34,7 +34,7 @@ import confluent.exceptions as exc
 import confluent.lookuptools as lookuptools
 import confluent.core
 
-def decode_alert(varbinds, configmanager):
+async def decode_alert(varbinds, configmanager):
     """Decode an SNMP alert for a server
 
     Given the agentaddr, OID for the trap, and a dict of varbinds,
@@ -49,11 +49,11 @@ def decode_alert(varbinds, configmanager):
         agentaddr = varbinds['.1.3.6.1.6.3.18.1.3.0']
     except KeyError:
         agentaddr = varbinds['1.3.6.1.6.3.18.1.3.0']
-    node = lookuptools.node_by_manager(agentaddr)
+    node = await lookuptools.node_by_manager(agentaddr)
     if node is None:
         raise exc.InvalidArgumentException(
             'Unable to find a node with specified manager')
-    return confluent.core.handle_path(
+    return await confluent.core.handle_path(
         '/nodes/{0}/events/hardware/decode'.format(node), 'update',
         configmanager, varbinds, autostrip=False)
 

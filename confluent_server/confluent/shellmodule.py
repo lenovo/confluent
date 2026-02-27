@@ -22,10 +22,10 @@
 # only by the process owner and such an owner would be able to read a file
 # anyway.  Regardless, it is advisable to 'unset'
 
+import asyncio
 import confluent.interface.console as conapi
-import eventlet
-import eventlet.green.select as select
-import eventlet.green.subprocess as subprocess
+import confluent.tasks as tasks
+#TODO: ASYNC: port shellmodule over if it matters
 import fcntl
 import os
 import pty
@@ -45,7 +45,7 @@ class ExecConsole(conapi.Console):
             'CONFLUENT_NODE': node,
         }
 
-    def relaydata(self):
+    async def relaydata(self):
         while self.subproc is not None:
             rdylist, _, _ = select.select(
                 (self._master, self.subproc.stderr), (), (),
@@ -55,7 +55,7 @@ class ExecConsole(conapi.Console):
                     somedata = os.read(self._master, 128)
                     while somedata:
                         self._datacallback(somedata)
-                        eventlet.sleep(0)
+                        await asyncio.sleep(0)
                         somedata = os.read(self._master, 128)
                 except OSError as e:
                     if e.errno == 5:
@@ -69,7 +69,7 @@ class ExecConsole(conapi.Console):
                     somedata = self.subproc.stderr.read()
                     while somedata:
                         self._datacallback(somedata)
-                        eventlet.sleep(0)
+                        await asyncio.sleep(0)
                         somedata = self.subproc.stderr.read()
                 except IOError as e:
                     if e.errno != 11:
@@ -95,12 +95,12 @@ class ExecConsole(conapi.Console):
         os.close(slave)
         fcntl.fcntl(master, fcntl.F_SETFL, os.O_NONBLOCK)
         fcntl.fcntl(self.subproc.stderr.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
-        self.readerthread = eventlet.spawn(self.relaydata)
+        self.readerthread = tasks.spawn(self.relaydata())
 
     def write(self, data):
         os.write(self._master, data)
 
-    def close(self):
+    async def close(self):
         try:
             os.close(self._master)
         except OSError:
@@ -110,7 +110,7 @@ class ExecConsole(conapi.Console):
         self.subproc.terminate()
         waittime = 10
         while self.subproc is not None and self.subproc.poll() is None:
-            eventlet.sleep(1)
+            await asyncio.sleep(1)
             waittime -= 1
             if waittime == 0:
                 break

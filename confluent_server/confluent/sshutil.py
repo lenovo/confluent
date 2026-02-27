@@ -6,7 +6,6 @@ import confluent.config.configmanager as cfm
 import confluent.collective.manager as collective
 import confluent.util as util
 import glob
-import eventlet.green.os as os
 import shutil
 import tempfile
 
@@ -39,7 +38,7 @@ async def assure_agent():
     if agent_pid is None:
         try:
             agent_starting = True
-            sai = util.run(['ssh-agent'])[0]
+            sai = await util.check_output(['ssh-agent'])[0]
             for line in sai.split(b'\n'):
                 if b';' not in line:
                     continue

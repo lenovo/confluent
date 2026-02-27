@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import glob
 import os
 import shutil
@@ -21,7 +22,7 @@ import tempfile
 import confluent.sshutil as sshutil
 import confluent.util as util
 import confluent.noderange as noderange
-import eventlet
+import confluent.tasks as tasks
 import pwd
 import grp
 import sys
@@ -194,8 +195,8 @@ def sync_list_to_node(sl, node, suffixes, peerip=None):
         targip = node
         if peerip:
             targip = peerip
-        output, stderr = util.run(
-            ['rsync', '-rvLD', targdir + '/', 'root@[{}]:/'.format(targip)])
+        output, stderr = util.check_output(
+            'rsync', '-rvLD', targdir + '/', 'root@[{}]:/'.format(targip))
     except Exception as e:
         if 'CalledProcessError' not in repr(e):
             # https://github.com/eventlet/eventlet/issues/413
@@ -321,14 +322,14 @@ def start_syncfiles(nodename, cfg, suffixes, principals=[]):
             syncrunners[nodename].wait()
         else:
             return '503 Synchronization already in progress', 'Synchronization already in progress for {}'.format(nodename)
-    syncrunners[nodename] = eventlet.spawn(
-        sync_list_to_node, sl, nodename, suffixes, peerip)
+    syncrunners[nodename] = tasks.spawn(
+        sync_list_to_node(sl, nodename, suffixes, peerip))
     if not cleaner:
-        cleaner = eventlet.spawn(cleanit)
+        cleaner = tasks.spawn(cleanit())
     return '202 Queued', 'Background synchronization initiated'  # backgrounded
 
 
-def cleanit():
+async def cleanit():
     toreap = {}
     while True:
         for nn in list(syncrunners):
@@ -345,7 +346,7 @@ def cleanit():
                     toreap[nn] = 1
             elif nn in toreap:
                 del toreap[nn]
-        eventlet.sleep(30)
+        await asyncio.sleep(30)
 
 
 def get_syncresult(nodename):

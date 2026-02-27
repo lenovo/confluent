@@ -19,6 +19,7 @@
 # capacity for having a multiple of sessions per node active at a given time
 
 
+import asyncio
 import confluent.consoleserver as consoleserver
 import confluent.exceptions as exc
 import confluent.messages as msg
@@ -28,9 +29,9 @@ activesessions = {}
 
 _reaper = None
 
-def reapsessions():
+async def reapsessions():
     while True:
-        eventlet.sleep(30)
+        await asyncio.sleep(30)
         for clientid in activesessions:
             currcli = activesessions[clientid]
             for sesshdl in list(currcli):
@@ -50,7 +51,7 @@ class _ShellHandler(consoleserver.ConsoleHandler):
         self.numusers = 0
         global _reaper
         if _reaper is None:
-            _reaper = eventlet.spawn(reapsessions)
+            _reaper = tasks.spawn(reapsessions())
 
 
     def check_collective(self, attrvalue):

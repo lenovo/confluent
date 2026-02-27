@@ -570,21 +570,23 @@ class ConsoleHandler(object):
                 await self._got_disconnected()
 
 
-def disconnect_node(node, configmanager):
+async def disconnect_node(node, configmanager):
     consk = (node, configmanager.tenant)
     if consk in _handled_consoles:
-        _handled_consoles[consk].close()
+        await _handled_consoles[consk].close()
         del _handled_consoles[consk]
 
 
 def _nodechange(added, deleting, renamed, configmanager):
+    async def _replace_node(old, new, cfm):
+        await disconnect_node(old, cfm)
+        await connect_node(new, cfm)
     for node in deleting:
-        eventlet.spawn(disconnect_node, node, configmanager)
+        tasks.spawn(disconnect_node(node, configmanager))
     for node in renamed:
-        disconnect_node(node, configmanager)
-        eventlet.spawn(connect_node, renamed[node], configmanager)
+        tasks.spawn(_replace_node(node, renamed[node], configmanager))
     for node in added:
-        eventlet.spawn(connect_node, node, configmanager)
+        tasks.spawn(connect_node(node, configmanager))
 
 
 def _start_tenant_sessions(cfm):
@@ -595,7 +597,7 @@ def _start_tenant_sessions(cfm):
         if manager and collective.get_myname() != manager:
             continue
         try:
-            connect_node(node, cfm)
+            await connect_node(node, cfm)
         except:
             _tracelog.log(traceback.format_exc(), ltype=log.DataTypes.event,
                           event=log.Events.stacktrace)
@@ -617,7 +619,7 @@ async def start_console_sessions():
     configmodule.hook_new_configmanagers(_start_tenant_sessions)
 
 
-def connect_node(node, configmanager, username=None, direct=True, width=80,
+async def connect_node(node, configmanager, username=None, direct=True, width=80,
                  height=24):
     attrval = configmanager.get_node_attributes(node, 'collective.manager')
     myc = attrval.get(node, {}).get('collective.manager', {}).get(

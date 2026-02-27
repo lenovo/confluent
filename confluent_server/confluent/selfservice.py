@@ -366,7 +366,7 @@ async def handle_request(req, make_response, mimetype):
                 pass
             if needlocalectl:
                 try:
-                    langinfo = util.run(['localectl', 'status'])[0].split(b'\n')
+                    langinfo = (await util.check_output('localectl', 'status'))[0].split(b'\n')
                 except Exception:
                     langinfo = []
                 for line in langinfo:

@@ -18,10 +18,7 @@
 import asyncio
 import sys
 import os
-#import eventlet
-#import eventlet.hubs
-#eventlet.hubs.use_hub("eventlet.hubs.asyncio")
-#from eventlet.asyncio import spawn_for_awaitable
+
 
 
 path = os.path.dirname(os.path.realpath(__file__))

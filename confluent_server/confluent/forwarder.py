@@ -17,9 +17,9 @@
 #This handles port forwarding for web interfaces on management devices
 #It will also hijack port 3900 and do best effort..
 
-import eventlet
-import eventlet.green.select as select
-import eventlet.green.socket as socket
+import asyncio
+import socket
+import confluent.tasks as tasks
 forwardersbyclient = {}
 relaysbysession = {}
 sessionsbyip = {}
@@ -28,24 +28,37 @@ sockhandler = {}
 vidtargetbypeer = {}
 vidforwarder = None
 
-def handle_connection(incoming, outgoing):
-    while True:
-        r, _, _ = select.select((incoming, outgoing), (), (), 60)
-        for mysock in r:
-            data = mysock.recv(32768)
-            if not data:
-                incoming.close()
-                outgoing.close()
-                return
-            if mysock == incoming:
-                outgoing.sendall(data)
-            elif mysock == outgoing:
-                incoming.sendall(data)
+async def handle_connection(incoming, outgoing):
+    async def _relay(reader, writer):
+        try:
+            while True:
+                data = await reader.read(32768)
+                if not data:
+                    return
+                writer.write(data)
+                await writer.drain()
+        except (ConnectionError, OSError):
+            return
+
+    inrdr, inwriter = await asyncio.open_connection(sock=incoming)
+    outrdr, outwriter = await asyncio.open_connection(sock=outgoing)
+    try:
+        done, pending = await asyncio.wait(
+            [asyncio.ensure_future(_relay(inrdr, outwriter)),
+             asyncio.ensure_future(_relay(outrdr, inwriter))],
+            return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+    finally:
+        inwriter.close()
+        outwriter.close()
 
 
-def forward_port(sock, target, clientip, sessionid):
+async def forward_port(sock, target, clientip, sessionid):
+    loop = asyncio.get_event_loop()
+    sock.setblocking(False)
     while True:
-        conn, cli = sock.accept()
+        conn, cli = await loop.sock_accept(sock)
         if cli[0] != clientip:
             conn.close()
             continue
@@ -57,14 +70,19 @@ def forward_port(sock, target, clientip, sessionid):
             continue
         if sessionid not in relaysbysession:
             relaysbysession[sessionid] = {}
-        relaysbysession[sessionid][eventlet.spawn(
-            handle_connection, conn, client)] = conn
+        relaysbysession[sessionid][tasks.spawn(
+            handle_connection(conn, client))] = conn
 
 
-def forward_video():
-    sock = eventlet.listen(('::', 3900, 0, 0), family=socket.AF_INET6)
+async def forward_video():
+    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('::', 3900, 0, 0))
+    sock.listen(50)
+    loop = asyncio.get_event_loop()
+    sock.setblocking(False)
     while True:
-        conn, cli = sock.accept()
+        conn, cli = await loop.sock_accept(sock)
         if cli[0] not in vidtargetbypeer or not sessionsbyip.get(cli[0], None):
             conn.close()
             continue
@@ -76,7 +94,7 @@ def forward_video():
             conn.close()
             vidclient.close()
             continue
-        eventlet.spawn_n(handle_connection, conn, vidclient)
+        tasks.spawn(handle_connection(conn, vidclient))
 
 
 def close_session(sessionid):
@@ -124,10 +142,10 @@ def get_port(addr, clientip, sessionid):
                     newport += 1
                     continue
         forwardersbyclient[sessionid][addr] = newsock
-        sockhandler[newsock] = eventlet.spawn(forward_port, newsock, addr,
-                                              clientip, sessionid)
+        sockhandler[newsock] = tasks.spawn(forward_port(newsock, addr,
+                                              clientip, sessionid))
         if not vidforwarder:
-            vidforwarder = eventlet.spawn(forward_video)
+            vidforwarder = tasks.spawn(forward_video())
     vidtargetbypeer[clientip] = addr
     return forwardersbyclient[sessionid][addr].getsockname()[1]
 

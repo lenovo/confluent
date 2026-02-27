@@ -25,13 +25,13 @@
 # service should have a null tenant and a tenant entry that correlates)
 __author__ = 'jjohnson2'
 
+import asyncio
 import confluent.config.configmanager as configmanager
 import itertools
-from eventlet.support import greendns
 
 manager_to_nodemap = {}
 
-def node_by_manager(manager):
+async def node_by_manager(manager):
     """Lookup a node by manager
 
     Search for a node according to a given network address.
@@ -46,7 +46,7 @@ def node_by_manager(manager):
     """
 
     manageraddresses = []
-    for tmpaddr in greendns.getaddrinfo(manager, None):
+    for tmpaddr in await asyncio.get_event_loop().getaddrinfo(manager, None):
         manageraddresses.append(tmpaddr[4][0])
     cfm = configmanager.ConfigManager(None)
     if manager in manager_to_nodemap:
@@ -68,7 +68,7 @@ def node_by_manager(manager):
         if currhm in manageraddresses:
             manager_to_nodemap[manager] = node
             return node
-        for curraddr in greendns.getaddrinfo(currhm, None):
+        for curraddr in await asyncio.get_event_loop().getaddrinfo(currhm, None):
             curraddr = curraddr[4][0]
             if curraddr in manageraddresses:
                 manager_to_nodemap[manager] = node
