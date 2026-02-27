@@ -589,7 +589,7 @@ def _nodechange(added, deleting, renamed, configmanager):
         tasks.spawn(connect_node(node, configmanager))
 
 
-def _start_tenant_sessions(cfm):
+async def _start_tenant_sessions(cfm):
     nodeattrs = cfm.get_node_attributes(cfm.list_nodes(), 'collective.manager')
     for node in nodeattrs:
         manager = nodeattrs[node].get('collective.manager', {}).get('value',
@@ -616,7 +616,7 @@ async def initialize():
 
 
 async def start_console_sessions():
-    configmodule.hook_new_configmanagers(_start_tenant_sessions)
+    await configmodule.hook_new_configmanagers(_start_tenant_sessions)
 
 
 async def connect_node(node, configmanager, username=None, direct=True, width=80,

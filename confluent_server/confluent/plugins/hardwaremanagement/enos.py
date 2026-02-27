@@ -90,7 +90,7 @@ def create(nodes, element, configmanager, inputdata):
         yield msg.ConfluentNodeError(node, "Not Implemented")
 
 
-def retrieve(nodes, element, configmanager, inputdata):
+async def retrieve(nodes, element, configmanager, inputdata):
     results = asyncio.Queue()
     workers = set([])
     if element == ["power", "state"]:

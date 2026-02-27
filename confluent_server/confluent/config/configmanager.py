@@ -1333,7 +1333,7 @@ def _addchange(changeset, node, attrname):
         changeset[node][attrname] = 1
 
 
-def hook_new_configmanagers(callback):
+async def hook_new_configmanagers(callback):
     """Register callback for new tenants
 
     From the point when this function is called until the end,
@@ -1345,10 +1345,10 @@ def hook_new_configmanagers(callback):
     :returns: identifier that can be used to cancel this registration
     """
     #TODO(jbjohnso): actually live up to the promise of ongoing callbacks
-    callback(ConfigManager(None))
+    await callback(ConfigManager(None))
     try:
         for tenant in _cfgstore['tenant']:
-            callback(ConfigManager(tenant))
+            await callback(ConfigManager(tenant))
     except KeyError:
         pass
 
