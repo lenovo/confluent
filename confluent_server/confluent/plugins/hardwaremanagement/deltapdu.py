@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#TODO: ASYNC asyncio conversion
 import confluent.util as util
 import confluent.messages as msg
 import confluent.exceptions as exc
-import eventlet
 from xml.etree.ElementTree import fromstring as rfromstring
 
 def fromstring(inputdata):
@@ -30,12 +30,8 @@ def fromstring(inputdata):
     return rfromstring(inputdata)  # nosec
 
 
-try:
-    import Cookie
-    httplib = eventlet.import_patched('httplib')
-except ImportError:
-    httplib = eventlet.import_patched('http.client')
-    import http.cookies as Cookie
+import http.client as httplib
+import http.cookies as Cookie
 
 # Delta PDU webserver always closes connection,
 # replace conditionals with always close

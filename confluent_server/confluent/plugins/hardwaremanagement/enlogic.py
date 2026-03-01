@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
+
 import confluent.util as util
 import confluent.messages as msg
 import confluent.exceptions as exc
-import eventlet.green.time as time
-import eventlet
-import eventlet.greenpool as greenpool
 import aiohmi.util.webclient as wc
-
+import confluent.tasks as tasks
+import time
 
 
 def simplify_name(name):
     return name.lower().replace(' ', '_').replace('/', '-').replace('_-_', '-')
 
-
-pdupool = greenpool.GreenPool(128)
+pdupool = tasks.TaskPool(128)
 
 _pduclients = {}
 
@@ -39,10 +38,9 @@ class EnlogicClient(object):
         self._wc = None
         self.username = None
 
-    @property
-    def token(self):
+    async def token(self):
         if not self._token:
-            self._token = self.login(self.configmanager)
+            self._token = await self.login(self.configmanager)
         return self._token
 
     @property
@@ -65,13 +63,13 @@ class EnlogicClient(object):
         self._wc = wc.WebConnection(target, port=443, verifycallback=cv)
         return self._wc
 
-    def grab_json_response(self, url, body=None):
-        rsp, status = self.wc.grab_json_response_with_status(url, body)
+    async def grab_json_response(self, url, body=None):
+        rsp, status = await self.wc.grab_json_response_with_status(url, body)
         if status == 401:
             self._token = None
         if body and 'cookie' in body:
-            body['cookie'] = self.token
-        rsp, status = self.wc.grab_json_response_with_status(url, body)
+            body['cookie'] = await self.token()
+        rsp, status = await self.wc.grab_json_response_with_status(url, body)
         if status < 300:
             return rsp
         return {}
@@ -113,7 +111,7 @@ class EnlogicClient(object):
     async def get_outlet(self, outlet):
         rsp = await self.grab_json_response(
             '/xhroutgetgrid.jsp', {
-                'cookie': self.token,
+                'cookie': await self.token(),
                 'pduid': 1
                 })
         outlets = rsp['outlet']
@@ -133,7 +131,7 @@ class EnlogicClient(object):
         else:
             raise Exception("Unrecognized state " + repr(state))
         request = {
-            'cookie': self.token,
+            'cookie': await self.token(),
             'outlet1': outlet1,
             'outlet2': outlet2,
             'pduid': 1,
@@ -163,7 +161,7 @@ async def read_sensors(element, node, configmanager):
     sn = _sensors_by_node.get(node, None)
     if not sn or sn[1] < time.time():
         gc = get_client(node, configmanager)
-        adev = await gc.grab_json_response('/energy_get', {'cookie': gc.token, 'end': 1, 'start': 1})
+        adev = await gc.grab_json_response('/energy_get', {'cookie': await gc.token(), 'end': 1, 'start': 1})
         _sensors_by_node[node] = (adev, time.time() + 1)
         sn = _sensors_by_node.get(node, None)
     if sn:
@@ -214,7 +212,7 @@ async def read_inventory(element, node, configmanager):
     inventory = {}
     gc = get_client(node, configmanager)
     adev = await gc.grab_json_response('/sys_info_get', {
-        'cookie': gc.token, 'pduid': 1
+        'cookie': await gc.token(), 'pduid': 1
         })
     inventory['present'] = True
     inventory['name'] = 'PDU'
@@ -228,7 +226,7 @@ async def read_inventory(element, node, configmanager):
 async def retrieve(nodes, element, configmanager, inputdata):
 
     if 'outlets' in element:
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
 
             gp.spawn(get_outlet, element, node, configmanager)
@@ -237,7 +235,7 @@ async def retrieve(nodes, element, configmanager, inputdata):
 
         return
     elif element[0] == 'sensors':
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
             gp.spawn(read_sensors, element, node, configmanager)
         for rsp in gp:
@@ -245,7 +243,7 @@ async def retrieve(nodes, element, configmanager, inputdata):
                 yield datum
         return
     elif '/'.join(element).startswith('inventory/firmware/all'):
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
             gp.spawn(read_firmware, node, configmanager)
         for rsp in gp:
@@ -253,7 +251,7 @@ async def retrieve(nodes, element, configmanager, inputdata):
                 yield datum
 
     elif '/'.join(element).startswith('inventory/hardware/all'):
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
             gp.spawn(read_inventory, element, node, configmanager)
         for rsp in gp:
@@ -274,6 +272,6 @@ async def update(nodes, element, configmanager, inputdata):
         gc = get_client(node, configmanager)
         newstate = inputdata.powerstate(node)
         await gc.set_outlet(element[-1], newstate)
-    eventlet.sleep(1)
+    await asyncio.sleep(1)
     async for res in retrieve(nodes, element, configmanager, inputdata):
         yield res

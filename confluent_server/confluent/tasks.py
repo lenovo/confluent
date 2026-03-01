@@ -43,7 +43,22 @@ class TaskHolder:
     def assign_task(self, task):
         self._task = task
     
-
+class TaskPile:
+    def __init__(self, pool):
+        self.pool = pool
+        self._tasks = set()
+    
+    def spawn(self, coro_func, *args):
+        task = self.pool.schedule(coro_func, *args)
+        self._tasks.add(task)
+        return task
+    
+    def __iter__(self):
+        while self._tasks:
+            done, _ = yield from asyncio.wait(self._tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                self._tasks.discard(task)
+                yield task
 
 class TaskPool:
     def __init__(self, max_concurrent):
@@ -74,6 +89,9 @@ class TaskPool:
         self._tasks.add(currtask)
         currtask.add_done_callback(self._done_callback)
         return tholder
+    
+    def running(self):
+        return bool(self._tasks)
     
     async def waitall(self):
         while self._tasks or self._pending:

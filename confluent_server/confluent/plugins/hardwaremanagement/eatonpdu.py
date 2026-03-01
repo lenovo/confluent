@@ -12,19 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#TODO: ASYNC asyncio conversion
+import asyncio
 import base64
 import confluent.util as util
 import confluent.messages as msg
 import confluent.exceptions as exc
-import eventlet
-import eventlet.green.socket as socket
-
 import aiohmi.util.webclient as wc
 import confluent.util as util
 import re
 import hashlib
 import json
 import time
+import socket
 
 
 def simplify_name(name):
@@ -56,12 +56,9 @@ def answer_challenge(username, password, data):
     s2rsp = hashlib.md5(b':'.join([skey, nonce, incvalue, cnonce, operation, s2server])).hexdigest().encode('utf8')
     return {'sessionKey': skey.decode('utf8'), 'szResponse': rsp.decode('utf8'), 'szResponseValue': s2rsp.decode('utf8')}
 
-try:
-    import Cookie
-    httplib = eventlet.import_patched('httplib')
-except ImportError:
-    httplib = eventlet.import_patched('http.client')
-    import http.cookies as Cookie
+
+import http.client as httplib
+import http.cookies as Cookie
 
 # Delta PDU webserver always closes connection,
 # replace conditionals with always close
@@ -80,10 +77,10 @@ class WebConnection(wc.WebConnection):
         self.secure = secure
         self.cookies = {}
 
-    def connect(self):
+    async def connect(self):
         if self.secure:
             return super(WebConnection, self).connect()
-        addrinfo = socket.getaddrinfo(self.host, self.port)[0]
+        addrinfo = (await asyncio.get_event_loop().getaddrinfo(self.host, self.port))[0]
         # workaround problems of too large mtu, moderately frequent occurance
         # in this space
         plainsock = socket.socket(addrinfo[0])
@@ -312,7 +309,7 @@ class PDUClient(object):
                 return
             idx += 1
 
-def retrieve(nodes, element, configmanager, inputdata):
+async def retrieve(nodes, element, configmanager, inputdata):
     if element[0] == 'sensors':
         for node in nodes:
             for res in get_sensor_data(element, node, configmanager):
@@ -325,12 +322,12 @@ def retrieve(nodes, element, configmanager, inputdata):
     for node in nodes:
         gc = PDUClient(node, configmanager)
         try:
-            state = gc.get_outlet(element[-1])
+            state = await gc.get_outlet(element[-1])
             yield msg.PowerState(node=node, state=state)
         finally:
-            gc.logout()
+            await gc.logout()
 
-def update(nodes, element, configmanager, inputdata):
+async def update(nodes, element, configmanager, inputdata):
     if 'outlets' not in element:
         yield msg.ConfluentResourceUnavailable(node, 'Not implemented')
         return
@@ -338,9 +335,9 @@ def update(nodes, element, configmanager, inputdata):
         gc = PDUClient(node, configmanager)
         newstate = inputdata.powerstate(node)
         try:
-            gc.set_outlet(element[-1], newstate)
+            await gc.set_outlet(element[-1], newstate)
         finally:
-            gc.logout()
-    eventlet.sleep(2)
-    for res in retrieve(nodes, element, configmanager, inputdata):
+            await gc.logout()
+    await asyncio.sleep(2)
+    async for res in retrieve(nodes, element, configmanager, inputdata):
         yield res

@@ -12,22 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import asyncio
 import confluent.util as util
 import confluent.messages as msg
 import confluent.exceptions as exc
-import eventlet.green.time as time
-import eventlet
-import eventlet.greenpool as greenpool
 import aiohmi.util.webclient as wc
-
+import confluent.tasks as tasks
+import time
 
 
 def simplify_name(name):
     return name.lower().replace(' ', '_').replace('/', '-').replace('_-_', '-')
 
 
-pdupool = greenpool.GreenPool(128)
+pdupool = tasks.TaskPool(128)
 
 
 def data_by_type(indata):
@@ -305,16 +303,15 @@ async def read_inventory(element, node, configmanager):
 async def retrieve(nodes, element, configmanager, inputdata):
 
     if 'outlets' in element:
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
-
             gp.spawn(get_outlet, element, node, configmanager)
         for res in gp:
             yield res
 
         return
     elif element[0] == 'sensors':
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
             gp.spawn(read_sensors, element, node, configmanager)
         for rsp in gp:
@@ -322,7 +319,7 @@ async def retrieve(nodes, element, configmanager, inputdata):
                 yield datum
         return
     elif '/'.join(element).startswith('inventory/firmware/all'):
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
             gp.spawn(read_firmware, node, configmanager)
         for rsp in gp:
@@ -330,7 +327,7 @@ async def retrieve(nodes, element, configmanager, inputdata):
                 yield datum
 
     elif '/'.join(element).startswith('inventory/hardware/all'):
-        gp = greenpool.GreenPile(pdupool)
+        gp = tasks.TaskPile(pdupool)
         for node in nodes:
             gp.spawn(read_inventory, element, node, configmanager)
         for rsp in gp:
@@ -349,7 +346,7 @@ async def update(nodes, element, configmanager, inputdata):
     for node in nodes:
         gc = GeistClient(node, configmanager)
         newstate = inputdata.powerstate(node)
-        gc.set_outlet(element[-1], newstate)
-    eventlet.sleep(1)
-    for res in retrieve(nodes, element, configmanager, inputdata):
+        await gc.set_outlet(element[-1], newstate)
+    await asyncio.sleep(1)
+    async for res in retrieve(nodes, element, configmanager, inputdata):
         yield res
