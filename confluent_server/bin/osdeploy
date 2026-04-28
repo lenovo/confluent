@@ -64,11 +64,11 @@ async def main(args):
     cmdset = ap.parse_args()
 
     if cmdset.command == 'list':
-        return oslist()
+        return await oslist()
     if cmdset.command == 'import':
         return await osimport(cmdset.imagefile, custname=cmdset.n)
     if cmdset.command == 'importcheck':
-        return osimport(cmdset.imagefile, checkonly=True)
+        return await osimport(cmdset.imagefile, checkonly=True)
     if cmdset.command == 'initialize':
         return await initialize(cmdset)
     if cmdset.command == 'updateboot':
@@ -511,10 +511,10 @@ async def rebase(profilename):
         else:
             print(repr(rsp))
 
-def oslist():
+async def oslist():
     c = client.Command()
     print("Distributions:")
-    for rsp in c.read('/deployment/distributions'):
+    async for rsp in c.read('/deployment/distributions'):
         if 'error' in rsp:
             sys.stderr.write(rsp['error'] + '\n')
             exitcode = 1
@@ -523,7 +523,7 @@ def oslist():
     print("")
 
     print("Profiles:")
-    for rsp in c.read('/deployment/profiles'):
+    async for rsp in c.read('/deployment/profiles'):
         if 'error' in rsp:
             sys.stderr.write(rsp['error'] + '\n')
             exitcode = 1
