@@ -942,18 +942,17 @@ async def resourcehandler_backend(req, make_response):
             file_directory = '/var/lib/confluent/client_assets/{}'.format(args.split('/')[-1])  
             filepath = '{0}/{1}'.format(file_directory, os.listdir(file_directory)[0])     # TODO find a way to validate that the file is found and its the expected one
             args_dict = {'filename': filepath}
-            noderrs = {}
             nodeurls = {}
             hdlr = pluginapi.handle_path(reqpath, operation, cfgmgr, args_dict)
-            for res in hdlr:
+            async for res in pluginapi.iterate_responses(hdlr):
                 if isinstance(res, confluent.messages.CreatedResource):
                     watchurl = res.kvpairs['created']
                     currnode = watchurl.split('/')[1]
                     nodeurls[currnode] = '/' + watchurl
 
             rsp = await make_response(mimetype, 200, 'OK')
-            await rsp.write(json.dumps({'data': nodeurls}))
-            return
+            await rsp.write(json.dumps({'data': nodeurls}).encode('utf8'))
+            return rsp
     elif (operation == 'create' and ('/staging' in reqpath)):
         url = reqpath
         args_dict = {}
@@ -963,17 +962,17 @@ async def resourcehandler_backend(req, make_response):
             if authorized['username'] == url.split('/')[2]:
                 args_dict.update({'filedata':req.content, 'content_length': content_length})  # TODO: replace env
                 hdlr = pluginapi.handle_path(url, operation, cfgmgr, args_dict)
-                for resp in hdlr:
+                async for resp in pluginapi.iterate_responses(hdlr):
                     if isinstance(resp, confluent.messages.FileUploadProgress):
                         if resp.kvpairs['progress']['value'] == 100:
                             progress = resp.kvpairs['progress']['value']
                 rsp = await make_response(mimetype, 200, 'OK')
-                await rsp.write(json.dumps({'data': 'done'}))
-                return       
+                await rsp.write(json.dumps({'data': 'done'}).encode('utf8'))
+                return rsp
             else:
                 rsp = await make_response(mimetype, 401, 'Unauthorized')
-                await rsp.write(json.dumps({'data': 'You do not have permission to write to file'}))
-                return 
+                await rsp.write(json.dumps({'data': 'You do not have permission to write to file'}).encode('utf8'))
+                return rsp
         elif len(url.split('/')) == 2:
             reqbody = await req.read()
             reqtype = req.content_type
@@ -987,12 +986,12 @@ async def resourcehandler_backend(req, make_response):
             except KeyError:
                 pass
             hdlr = pluginapi.handle_path(url, operation, cfgmgr, args_dict)    
-            for res in hdlr:
+            async for res in pluginapi.iterate_responses(hdlr):
                 if isinstance(res, confluent.messages.CreatedResource):
                     stageurl = res.kvpairs['created']
             rsp = await make_response(mimetype, 200, 'OK')
-            await rsp.write(json.dumps({'data': stageurl}))
-            return
+            await rsp.write(json.dumps({'data': stageurl}).encode('utf8'))
+            return rsp
     else:
         # normal request
         url = reqpath

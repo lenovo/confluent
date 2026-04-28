@@ -1559,6 +1559,6 @@ async def handle_path(path, operation, configmanager, inputdata=None, autostrip=
         return handle_discovery(pathcomponents[1:], operation, configmanager,
                                 inputdata)
     elif pathcomponents[0] == 'staging':
-        return await handle_staging(pathcomponents, operation, configmanager, inputdata)
+        return handle_staging(pathcomponents, operation, configmanager, inputdata)
     else:
         raise exc.NotFoundException()
