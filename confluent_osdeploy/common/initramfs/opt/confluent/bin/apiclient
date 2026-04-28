@@ -703,4 +703,7 @@ if __name__ == '__main__':
     elif checkonly:
         sys.stdout.write(mclient.check_connections())
     else:
-        sys.stdout.write(mclient.grab_url(sys.argv[1], data).decode())
+        try:
+            sys.stdout.buffer.write(mclient.grab_url(sys.argv[1], data))
+        except AttributeError:
+            sys.stdout.write(mclient.grab_url(sys.argv[1], data))
