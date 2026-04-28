@@ -754,7 +754,7 @@ async def reply_dhcp4(node, info, packet, cfg, reqview, httpboot, cfd, profile, 
     if not myipn:
         myipn = info['netinfo']['recvip']
     if niccfg['ipv4_address'] == myipn:
-        log.log({'error': 'Unable to serve {0} due to duplicated address between node and interface index "{}"'.format(node, info['netinfo']['ifidx'])})
+        log.log({'error': 'Unable to serve {} due to duplicated address between node and interface index "{}"'.format(node, info['netinfo']['ifidx'])})
         return
     can302 = True
     if isboot and httpboot:
