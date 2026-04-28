@@ -703,7 +703,7 @@ async def resourcehandler_backend(req, make_response):
                 await rsp.write(b'')
                 return rsp
             else: # The user agent is too dumb, check headers for server side redirects
-                delegatemethod = env.get('HTTP_X_DELEGATE_METHOD', None)
+                delegatemethod = req.headers.get('X-Delegate-Method', None)
                 if delegatemethod == 'accel':
                     headers = {'Content-Type': 'application/octet-stream'}
                     headers['X-Accel-Redirect'] = relurl
@@ -836,9 +836,9 @@ async def resourcehandler_backend(req, make_response):
             rsp = await make_response('text/plain', 302, {'Location': url})
             await rsp.write(b'Our princess is in another castle!')
             return rsp
-        funport = forwarder.get_port(targip, env['HTTP_X_FORWARDED_FOR'],
+        funport = forwarder.get_port(targip, req.headers.get('X-Forwarded-For', None),
                                      authorized['sessionid'])
-        host = env['HTTP_X_FORWARDED_HOST']
+        host = req.headers.get('X-Forwarded-Host', None)
         if ']' in host:
             host = host.split(']')[0] + ']'
         elif ':' in host:
@@ -960,7 +960,7 @@ async def resourcehandler_backend(req, make_response):
         if content_length > 0 and (len(url.split('/')) > 2):
             # check if the user and the url defined user are the same 
             if authorized['username'] == url.split('/')[2]:
-                args_dict.update({'filedata':req.content, 'content_length': content_length})  # TODO: replace env
+                args_dict.update({'filedata':req.content, 'content_length': content_length})
                 hdlr = pluginapi.handle_path(url, operation, cfgmgr, args_dict)
                 async for resp in pluginapi.iterate_responses(hdlr):
                     if isinstance(resp, confluent.messages.FileUploadProgress):
