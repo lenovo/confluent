@@ -1429,13 +1429,13 @@ async def handle_staging(pathcomponents, operation, configmanager, inputdata):
                 content_length = inputdata['content_length']
                 remaining_length = content_length
                 filedata = inputdata['filedata']
-                chunk_size = 16384
+                chunk_size = 32768
                 progress = 0.0
                 with open(file, 'wb') as f:
                     while remaining_length > 0:
                         progress = (1 - (remaining_length/content_length)) * 100
                         #TODO: ASYNC Need to change to aiohttp approach
-                        datachunk = filedata['wsgi.input'].read(min(chunk_size, remaining_length))
+                        datachunk = await filedata.read(min(chunk_size, remaining_length))
                         f.write(datachunk)     
                         remaining_length -= len(datachunk)
                         await asyncio.sleep(0)

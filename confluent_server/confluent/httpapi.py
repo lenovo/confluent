@@ -873,10 +873,6 @@ async def resourcehandler_backend(req, make_response):
             height = querydict.get('height', 24)
             datacallback = None
             asynchdl = None
-            if 'ConfluentAsyncId' in req.headers:
-                asynchdl = confluent.asynchttp.get_async(env, querydict)
-                termrel = asynchdl.set_term_relation(env)
-                datacallback = termrel.got_data
             try:
                 if shellsession:
                     consession = shellserver.ShellSession(
@@ -965,7 +961,7 @@ async def resourcehandler_backend(req, make_response):
         if content_length > 0 and (len(url.split('/')) > 2):
             # check if the user and the url defined user are the same 
             if authorized['username'] == url.split('/')[2]:
-                args_dict.update({'filedata':env, 'content_length': content_length})  # TODO: replace env
+                args_dict.update({'filedata':req.content, 'content_length': content_length})  # TODO: replace env
                 hdlr = pluginapi.handle_path(url, operation, cfgmgr, args_dict)
                 for resp in hdlr:
                     if isinstance(resp, confluent.messages.FileUploadProgress):
@@ -979,8 +975,8 @@ async def resourcehandler_backend(req, make_response):
                 await rsp.write(json.dumps({'data': 'You do not have permission to write to file'}))
                 return 
         elif len(url.split('/')) == 2:
-            reqbody = env['wsgi.input'].read(int(env['CONTENT_LENGTH'])) # TODO: replace env
-            reqtype = env['CONTENT_TYPE']
+            reqbody = await req.read()
+            reqtype = req.content_type
             if not isinstance(reqbody, str):
                 reqbody = reqbody.decode('utf8')
             pbody = json.loads(reqbody)
