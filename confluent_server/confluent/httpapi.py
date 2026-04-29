@@ -570,9 +570,9 @@ async def wsock_handler(req):
                             print(repr(clientmsg))
         finally:
             for cons in myconsoles:
-                myconsoles[cons].destroy()
+                await myconsoles[cons].destroy()
             if asess:
-                asess.destroy()
+                await asess.destroy()
         return rsp
     if '/console/session' in ws.path or '/shell/sessions/' in ws.path:
         def datacallback(data):
