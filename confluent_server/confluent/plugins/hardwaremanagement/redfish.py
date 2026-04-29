@@ -294,9 +294,10 @@ async def perform_requests(operator, nodes, element, cfg, inputdata, realop):
     try:
         # drain queue if a thread put something on the queue and died
         while True:
-            datum = await resultdata.get_nowait()
+            datum = resultdata.get_nowait()
             if datum != 'Done':
                 yield datum
+            await asyncio.sleep(0)
     except asyncio.QueueEmpty:
         pass
 
