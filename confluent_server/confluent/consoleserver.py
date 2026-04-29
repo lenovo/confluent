@@ -537,6 +537,8 @@ class ConsoleHandler(object):
         for rcpt in list(self.livesessions):
             try:
                 await rcpt.data_handler(data)
+            except exc.Disconnect:
+                await rcpt.destroy()
             except Exception as e:  # No matter the reason, advance to next recipient
                 print(repr(e))
                 _tracelog.log(traceback.format_exc(), ltype=log.DataTypes.event,

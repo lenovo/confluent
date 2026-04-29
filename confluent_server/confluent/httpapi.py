@@ -17,6 +17,8 @@
 # This SCGI server provides a http wrap to confluent api
 # It additionally manages httprequest console sessions
 import base64
+
+import aiohttp
 try:
     import Cookie
 except ModuleNotFoundError:
@@ -449,7 +451,10 @@ def websockify_data(data):
 def datacallback_bound(clientsessid, rsp):
     async def datacallback(data):
         data = websockify_data(data)
-        await rsp.send_str(u'${0}$'.format(clientsessid) + data)
+        try:
+            await rsp.send_str(u'${0}$'.format(clientsessid) + data)
+        except aiohttp.client_exceptions.ClientConnectionResetError:
+            raise exc.Disconnect("Client disconnected")
     return datacallback
 
 async def wsock_handler(req):

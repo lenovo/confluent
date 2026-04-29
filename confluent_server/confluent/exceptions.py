@@ -146,3 +146,7 @@ class LoggedOut(ConfluentException):
 
     def get_error_body(self):
         return '{"loggedout": 1}'
+    
+class Disconnect(ConfluentException):
+    apierrorcode = 503
+    _apierrorstr = 'Client disconnected'
