@@ -405,21 +405,23 @@ async def perform_requests(operator, nodes, element, cfg, inputdata, realop):
             bundle = []
             datum = await asyncio.wait_for(resultdata.get(), timeout=10.0)
             while datum:
-                if datum != 'Done':
-                    if isinstance(datum, Exception):
-                        raise datum
-                    if (hasattr(datum, 'kvpairs') and datum.kvpairs and
-                            len(datum.kvpairs) == 1):
-                        bundle.append((list(datum.kvpairs)[0], datum))
-                        numnodes -= 1
-                    else:
-                        yield datum
-                timeout = 0.1 if numnodes else 0.001
-                datum = await asyncio.wait_for(resultdata.get(), timeout=timeout)
+                if datum == 'Done':
+                    datum = None
+                    break
+                if isinstance(datum, Exception):
+                    raise datum
+                if (hasattr(datum, 'kvpairs') and datum.kvpairs and
+                        len(datum.kvpairs) == 1):
+                    bundle.append((list(datum.kvpairs)[0], datum))
+                    numnodes -= 1
+                else:
+                    yield datum
+            timeout = 0.1 if numnodes else 0.001
+            datum = await asyncio.wait_for(resultdata.get(), timeout=timeout)
         except asyncio.QueueEmpty:
             pass
         except asyncio.TimeoutError:
-            print("odd timeout?" + repr(element) + repr(nodes))
+            # the timeout is just a sign to push out pending bundled stuff
             pass
         finally:
             for datum in sorted(
