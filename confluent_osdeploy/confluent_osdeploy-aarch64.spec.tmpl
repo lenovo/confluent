@@ -26,7 +26,7 @@ mkdir -p opt/confluent/bin
 mkdir -p stateless-bin
 cp -a el8bin/* .
 ln -s el8 el9
-ln -s el8 el10
+cp -a el8 el10
 cp -a debian debian13
 mkdir -p debian13/initramfs/usr
 mv debian13/initramfs/lib debian13/initramfs/usr/
