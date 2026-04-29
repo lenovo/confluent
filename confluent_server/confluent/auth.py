@@ -95,6 +95,7 @@ _allowedbyrole = {
             '/node*/power/state',
             '/node*/sensors/*',
             '/node*/attributes/current',
+            '/node*/attributes/all',
             '/node*/description',
             '/noderange/*/nodes/',
             '/nodes/',
