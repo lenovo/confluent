@@ -573,7 +573,7 @@ async def wsock_handler(req):
                 myconsoles[cons].destroy()
             if asess:
                 asess.destroy()
-        return
+        return rsp
     if '/console/session' in ws.path or '/shell/sessions/' in ws.path:
         def datacallback(data):
             ws.send(websockify_data(data))
