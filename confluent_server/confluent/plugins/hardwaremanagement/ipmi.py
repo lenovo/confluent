@@ -416,8 +416,8 @@ async def perform_requests(operator, nodes, element, cfg, inputdata, realop):
                     numnodes -= 1
                 else:
                     yield datum
-            timeout = 0.1 if numnodes else 0.001
-            datum = await asyncio.wait_for(resultdata.get(), timeout=timeout)
+                timeout = 0.1 if numnodes else 0.001
+                datum = await asyncio.wait_for(resultdata.get(), timeout=timeout)
         except asyncio.QueueEmpty:
             pass
         except asyncio.TimeoutError:
