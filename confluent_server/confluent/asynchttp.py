@@ -84,9 +84,9 @@ class AsyncSession(object):
     def add_console_session(self, sessionid):
         self.consoles.add(sessionid)
 
-    def destroy(self):
+    async def destroy(self):
         for console in self.consoles:
-            _consolesessions[console]['session'].destroy()
+            await _consolesessions[console]['session'].destroy()
         self.consoles = set([])
         del _asyncsessions[self.asyncid]
 
