@@ -27,17 +27,10 @@ if grep ^ntpservers: /etc/confluent/confluent.deploycfg > /dev/null; then
 fi
 
 if [ -f /tmp/timeservers ]; then
-
-ntpsrvs=$(cat /tmp/timeservers)
-
-sed -i "1,/^pool * /c\\
-${ntpsrvs//$'\n'/\\$'\n'}" /etc/chrony.conf
-
-
-systemctl restart chronyd
-
-rm -f /tmp/timeservers
-
+    sed -i '/^[[:space:]]*\(pool\|server\)[[:space:]]/d' /etc/chrony.conf
+    cat /tmp/timeservers >> /etc/chrony.conf
+    systemctl restart chronyd
+    rm -f /tmp/timeservers
 fi
 
 
