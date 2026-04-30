@@ -535,10 +535,11 @@ async def oslist():
 async def osimport(imagefile, checkonly=False, custname=None):
     c = client.Command()
     imagefile = os.path.abspath(imagefile)
+    await c.ensure_connected()
     if c.unixdomain:
         ofile = open(imagefile, 'rb')
         try:
-            c.add_file(imagefile, ofile.fileno(), 'rb')
+            await c.add_file(imagefile, ofile.fileno(), 'rb')
         except Exception:
             pass
     importing = False

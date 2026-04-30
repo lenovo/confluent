@@ -249,7 +249,7 @@ async def send(handle, data, filehandle=None):
         else:
             tl |= (2 << 24)
             await cloop.sock_sendall(handle, struct.pack("!I", tl))
-            await send_fds(handle, b'', [filehandle])
+            await send_fds(handle, sdata, [filehandle])
 
 
 async def _grabhdl(handle, size):
@@ -292,29 +292,8 @@ async def recv(handle):
     if datatype == tlv.Types.filehandle:
         if isinstance(handle, tuple):
             raise Exception('Filehandle not supported over TLS socket')
-        filehandles = array.array('i')
-        rawbuffer = bytearray(2048)
-        pkttype = ctypes.c_ubyte * 2048
-        data = pkttype.from_buffer(rawbuffer)
-        cmsgsize = CMSG_SPACE(ctypes.sizeof(ctypes.c_int)).value
-        cmsgarr = bytearray(cmsgsize)
-        cmtype = ctypes.c_ubyte * cmsgsize
-        cmsg = cmtype.from_buffer(cmsgarr)
-        cmsg.cmsg_level = socket.SOL_SOCKET
-        cmsg.cmsg_type = SCM_RIGHTS
-        cmsg.cmsg_len = CMSG_LEN(ctypes.sizeof(ctypes.c_int))
-        iov = iovec()
-        iov.iov_base = ctypes.addressof(data)
-        iov.iov_len = 2048
-        msg = msghdr()
-        msg.msg_iov = ctypes.pointer(iov)
-        msg.msg_iovlen = 1
-        msg.msg_control = ctypes.addressof(cmsg)
-        msg.msg_controllen = ctypes.sizeof(cmsg)
-        i = await recv_fds(handle, 2048, 4)
-        data = i[0]
-        filehandles = i[1]
-        data = json.loads(bytes(data))
+        msg, filehandles = await recv_fds(handle, dlen, 4)
+        data = json.loads(bytes(msg))
         return ClientFile(data['filename'], data['mode'], filehandles[0])
     else:
         data = await _grabhdl(handle, dlen)

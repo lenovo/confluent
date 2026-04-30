@@ -225,7 +225,7 @@ class Command(object):
             raise Exception('Not supported with connected confluent server')
         if not self.unixdomain:
             raise Exception('Can only add a file to a unix domain connection')
-        tlvdata.send(self.connection, {'filename': name, 'mode': mode}, handle)
+        await tlvdata.send(self.connection, {'filename': name, 'mode': mode}, handle)
 
     async def authenticate(self, username, password):
         await tlvdata.send(self.connection,
