@@ -1037,7 +1037,6 @@ async def rebase_profile(dirname):
         profiledir = dirname
     else:
         profiledir = '/var/lib/confluent/public/os/{0}'.format(dirname)
-    currhashes = await get_hashes(profiledir)
     festfile = os.path.join(profiledir, 'manifest.yaml')
     try:
         with open(festfile, 'r') as festfile:
@@ -1045,6 +1044,7 @@ async def rebase_profile(dirname):
     except IOError:
         raise ManifestMissing()
     distdir = manifest['distdir']
+    currhashes = await get_hashes(profiledir, distdir)
     newdisthashes = await get_hashes(distdir)
     olddisthashes = manifest['disthashes']
     customized = []
@@ -1086,7 +1086,15 @@ async def rebase_profile(dirname):
 
 
 
-async def get_hashes(dirname):
+async def get_hashes(dirname, filterdir=None):
+    filtermap = {}
+    if filterdir:
+        for dname, _, fnames in os.walk(filterdir):
+            for fname in fnames:
+                fullname = os.path.join(dname, fname)
+                subname = fullname.replace(filterdir + '/', '')
+                if os.path.isfile(fullname):
+                    filtermap[subname] = True
     hashmap = {}
     for dname, _, fnames in os.walk(dirname):
         for fname in fnames:
@@ -1094,6 +1102,8 @@ async def get_hashes(dirname):
                 continue
             fullname = os.path.join(dname, fname)
             subname = fullname.replace(dirname + '/', '')
+            if filterdir and subname not in filtermap:
+                continue
             if os.path.isfile(fullname):
                 hashmap[subname] = await get_hash(fullname)
     return hashmap
@@ -1114,7 +1124,7 @@ async def generate_stock_profiles(defprofile, distpath, targpath, osname,
             continue
         oumask = os.umask(0o22)
         shutil.copytree(srcname, dirname)
-        hmap = await get_hashes(dirname)
+        hmap = await get_hashes(dirname, srcname)
         profdata = None
         try:
             os.makedirs('{0}/boot/initramfs'.format(dirname), 0o755)
