@@ -244,16 +244,14 @@ def draw_text(text, width, height):
         nd.rectangle((0, 0, nerr.width - 1, nerr.height -1), outline='white')
         outfile = io.BytesIO()
         nerr.save(outfile, format='PNG')
-        data = base64.b64encode(outfile.getbuffer())
-        draw_image(data, width, height, doscale=False)
+        draw_image(outfile.getbuffer(), width, height, doscale=False)
     else:
         sys.stdout.write(text)
         cursor_left(len(text))
 
-def draw_image(data, width, height, doscale=True):
+def draw_image(bindata, width, height, doscale=True):
     imageformat = os.environ.get('CONFLUENT_IMAGE_PROTOCOL', 'kitty')
     if doscale and Image and width:
-        bindata = base64.b64decode(data)
         binfile = io.BytesIO()
         binfile.write(bindata)
         binfile.seek(0)
@@ -281,28 +279,27 @@ def draw_image(data, width, height, doscale=True):
         nimg.paste(img, box=(2, 2))
         outfile = io.BytesIO()
         nimg.save(outfile, format='PNG')
-        data = base64.b64encode(outfile.getbuffer())
+        bindata = outfile.getbuffer()
     if imageformat == 'sixel':
-        sixel_draw(data)
+        sixel_draw(bindata)
     elif imageformat == 'iterm':
-        iterm_draw(data, width, height)
+        iterm_draw(bindata, width, height)
     else:
-        kitty_draw(data, width, height)
+        kitty_draw(bindata, width, height)
 
 
-def sixel_draw(data):
-    bindata = base64.b64decode(data)
+def sixel_draw(bindata):
     binfile = io.BytesIO()
     binfile.write(bindata)
     binfile.seek(0)
     DumbWriter().draw(binfile)
 
-def iterm_draw(data, width, height):
+def iterm_draw(bindata, width, height):
+    data = base64.b64encode(bindata)
     if not height:
         height = 'auto'
     if not width:
         width = 'auto'
-    bindata = base64.b64decode(data)
     datalen = len(bindata)
     sys.stdout.write(
         '\x1b]1337;File=inline=1;width={};height={};size={}:'.format(width,height,datalen))
@@ -311,7 +308,8 @@ def iterm_draw(data, width, height):
     sys.stdout.flush()
 
 
-def kitty_draw(data, width, height):
+def kitty_draw(bindata, width, height):
+    data = base64.b64encode(bindata)
     preamble = '\x1b_Ga=T,f=100'
     if height:
         preamble += f',r={height},c={width}'
@@ -403,7 +401,7 @@ def redraw():
                 sticky_cursor()
             sys.stdout.write('{}: '.format(node))
         # one row is used by our own name, so cheight - 1 for that allowance
-        draw_image(imgdata.encode(), cwidth, cheight - 1 if cheight else cheight)
+        draw_image(imgdata, cwidth, cheight - 1 if cheight else cheight)
         if node in nodepositions:
             cursor_restore()
             reset_cursor(node)
@@ -475,6 +473,7 @@ def do_screenshot():
                     if len(imgdata) < 32: # We were subjected to error
                         errorstr = f'Unable to get screenshot'
                 if errorstr or imgdata:
+                    imgdata = base64.b64decode(imgdata)
                     draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight)
         if asyncvnc:
             urlbynode = {}
@@ -522,7 +521,7 @@ async def do_vnc_screenshot(node, url, cwidth, cheight):
         image = Image.fromarray(pixels)
         outfile = io.BytesIO()
         image.save(outfile, format='PNG')
-        imgdata = base64.b64encode(outfile.getbuffer()).decode()
+        imgdata = outfile.getbuffer()
         if imgdata:
             draw_node(node, imgdata, '', '', cwidth, cheight)
 
@@ -542,7 +541,7 @@ def draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight):
     if errorstr:
         draw_text(errorstr, cwidth, cheight -1 if cheight else cheight)
     else:
-        draw_image(imgdata.encode(), cwidth, cheight - 1 if cheight else cheight)
+        draw_image(imgdata, cwidth, cheight - 1 if cheight else cheight)
     if node in nodepositions:
         cursor_restore()
         reset_cursor(node)
