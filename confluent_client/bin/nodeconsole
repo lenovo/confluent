@@ -28,6 +28,7 @@ if path.startswith('/opt'):
 import confluent.client as client
 import confluent.sortutil as sortutil
 import confluent.logreader as logreader
+import confluent.vnc as vnc
 import time
 import select
 import signal
@@ -498,19 +499,16 @@ async def do_screenshot(streaming=False):
                     if errorstr or imgdata:
                         imgdata = base64.b64decode(imgdata)
                         draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight)
-        if asyncvnc:
-            urlbynode = {}
-            for node in vnconly:
-                for res in sess.update(f'/nodes/{node}/console/ikvm', {'method': 'unix'}):
-                    url = res.get('item', {}).get('href')
-                    if url:
-                        urlbynode[node] = url
-            await grab_vncs(urlbynode, cwidth, cheight, streaming)
-            if resized:
-                do_resize(True)
-                resized = False
-        elif vnconly:
-            sys.stderr.write("Require asyncvnc installed to do VNC screenshotting\n")
+        urlbynode = {}
+        for node in vnconly:
+            for res in sess.update(f'/nodes/{node}/console/ikvm', {'method': 'unix'}):
+                url = res.get('item', {}).get('href')
+                if url:
+                    urlbynode[node] = url
+        await grab_vncs(urlbynode, cwidth, cheight, streaming)
+        if resized:
+            do_resize(True)
+            resized = False
         if options.interval is None:
             dorefresh = False
         else:
@@ -518,10 +516,7 @@ async def do_screenshot(streaming=False):
             time.sleep(options.interval)
     sys.exit(0)
 
-try:
-    import asyncio, asyncvnc
-except ImportError:
-    asyncvnc = None
+import asyncio
 
 async def grab_vncs(urlbynode, cwidth, cheight, streaming=False):
     tasks = []
@@ -530,16 +525,12 @@ async def grab_vncs(urlbynode, cwidth, cheight, streaming=False):
         tasks.append(asyncio.create_task(do_vnc(node, url, cwidth, cheight, streaming)))
     await asyncio.gather(*tasks)
 
-async def my_opener(host, port):
-    # really, host is the unix
-    return await asyncio.open_unix_connection(host)
-
 async def do_vnc(node, url, cwidth, cheight, streaming=False):
     keeprunning = True
     retries = 5
     while keeprunning:
         try:
-            async with asyncvnc.connect(url, opener=my_opener) as client:
+            async with vnc.VNCClient.create(url) as client:
                 while True:
                     # Retrieve pixels as a 3D numpy array
                     try:
@@ -550,7 +541,7 @@ async def do_vnc(node, url, cwidth, cheight, streaming=False):
                         # but OpenBMC sends an alpha heavy mouse overlay
                         # that results in blackness
                         # possibly use client side cursor to suppress the ick?
-                        pixels = await asyncio.wait_for(client.screenshot(), 4)
+                        image = await client.get_screenshot()
                     except asyncio.TimeoutError:
                         # need a better closed connection detector, a static screen triggers timeouts too
                         # without the timeout, we lose track of proxmox reset
@@ -558,7 +549,6 @@ async def do_vnc(node, url, cwidth, cheight, streaming=False):
                         break
                     retries = 5
                     # Save as PNG using PIL/pillow
-                    image = Image.fromarray(pixels)
                     outfile = io.BytesIO()
                     image.save(outfile, format='PNG')
                     imgdata = outfile.getbuffer()
@@ -567,7 +557,6 @@ async def do_vnc(node, url, cwidth, cheight, streaming=False):
                     if not streaming:
                         keeprunning = False
                         break
-                    await asyncio.sleep(0)
         except ValueError as e:
             draw_node(node, None, str(e), '', cwidth, cheight)
             retries -= 1
