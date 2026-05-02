@@ -75,6 +75,8 @@ argparser.add_option('-s', '--screenshot', action='store_true', default=False,
 argparser.add_option('-i', '--interval', type='float',
                      help='Interval in seconds to redraw the screenshot. Currently only '
                           'works for one node')
+argparser.add_option('-v', '--video', action='store_true', default=False,
+                     help='Attempt to continuously stream video from nodes that support streaming console via confluent')
 argparser.add_option('-w','--windowed', action='store_true', default=False,
                      help='Open terminal windows for each node.  The '
                           'environment variable NODECONSOLE_WINDOWED_COMMAND '
@@ -231,10 +233,18 @@ def draw_text(text, width, height):
         nd = ImageDraw.Draw(nerr)
         for txtpiece in text.split('\n'):
             fntsize = 8
-            txtfont = ImageFont.truetype('DejaVuSans.ttf', size=fntsize)
-            while nd.textlength(txtpiece, font=txtfont) < int(imgwidth * 0.90):
-                fntsize += 1
+            scalefont = True
+            try:
                 txtfont = ImageFont.truetype('DejaVuSans.ttf', size=fntsize)
+            except OSError:
+                scalefont = False
+                txtfont = ImageFont.load_default(fntsize)
+            while scalefont and nd.textlength(txtpiece, font=txtfont) < int(imgwidth * 0.90):
+                fntsize += 1
+                try:
+                    txtfont = ImageFont.truetype('DejaVuSans.ttf', size=fntsize)
+                except OSError:
+                    txtfont = ImageFont.load_default(fntsize)
             fntsize -= 1
             if fntsize < maxfntsize:
                 maxfntsize = fntsize
@@ -409,7 +419,8 @@ def redraw():
             sys.stdout.write('\n')
         sys.stdout.flush()
 resized = False
-def do_screenshot():
+
+async def do_screenshot(streaming=False):
     global resized
     global numrows
     sess = client.Command()
@@ -456,25 +467,37 @@ def do_screenshot():
     firstnodename = None
     dorefresh = True
     vnconly = set([])
-    while dorefresh:
-        for res in sess.read('/noderange/{}/console/ikvm_screenshot'.format(args[0])):
+    if streaming:
+        doexit = 0
+        for res in sess.read('/noderange/{}/console/ikvm_methods'.format(args[0])):
             for node in res.get('databynode', {}):
-                errorstr = ''
-                if not firstnodename:
-                    firstnodename = node
-                error = res['databynode'][node].get('error')
-                if error and 'vnc available' in error:
-                    vnconly.add(node)
-                    continue
-                elif error:
-                    errorstr = error
-                imgdata = res['databynode'][node].get('image', {}).get('imgdata', None)
-                if imgdata:
-                    if len(imgdata) < 32: # We were subjected to error
-                        errorstr = f'Unable to get screenshot'
-                if errorstr or imgdata:
-                    imgdata = base64.b64decode(imgdata)
-                    draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight)
+                methods = res['databynode'][node].get('ikvm_methods', [])
+                if 'vnc' not in methods and 'openbmc' not in methods:
+                    sys.stderr.write(f'Node {node} does not support video via confluent\n')
+                    doexit = 1
+                vnconly.add(node)
+        if doexit:
+            sys.exit(1)
+    while dorefresh:
+        if not streaming:
+            for res in sess.read('/noderange/{}/console/ikvm_screenshot'.format(args[0])):
+                for node in res.get('databynode', {}):
+                    errorstr = ''
+                    if not firstnodename:
+                        firstnodename = node
+                    error = res['databynode'][node].get('error')
+                    if error and 'vnc available' in error:
+                        vnconly.add(node)
+                        continue
+                    elif error:
+                        errorstr = error
+                    imgdata = res['databynode'][node].get('image', {}).get('imgdata', None)
+                    if imgdata:
+                        if len(imgdata) < 32: # We were subjected to error
+                            errorstr = f'Unable to get screenshot'
+                    if errorstr or imgdata:
+                        imgdata = base64.b64decode(imgdata)
+                        draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight)
         if asyncvnc:
             urlbynode = {}
             for node in vnconly:
@@ -482,7 +505,7 @@ def do_screenshot():
                     url = res.get('item', {}).get('href')
                     if url:
                         urlbynode[node] = url
-            draw_vnc_grabs(urlbynode, cwidth, cheight)
+            await grab_vncs(urlbynode, cwidth, cheight, streaming)
             if resized:
                 do_resize(True)
                 resized = False
@@ -500,30 +523,59 @@ try:
 except ImportError:
     asyncvnc = None
 
-def draw_vnc_grabs(urlbynode, cwidth, cheight):
-    asyncio.run(grab_vncs(urlbynode, cwidth, cheight))
-async def grab_vncs(urlbynode, cwidth, cheight):
+async def grab_vncs(urlbynode, cwidth, cheight, streaming=False):
     tasks = []
     for node in urlbynode:
         url = urlbynode[node]
-        tasks.append(asyncio.create_task(do_vnc_screenshot(node, url, cwidth, cheight)))
+        tasks.append(asyncio.create_task(do_vnc(node, url, cwidth, cheight, streaming)))
     await asyncio.gather(*tasks)
 
 async def my_opener(host, port):
     # really, host is the unix
     return await asyncio.open_unix_connection(host)
 
-async def do_vnc_screenshot(node, url, cwidth, cheight):
-    async with asyncvnc.connect(url, opener=my_opener) as client:
-        # Retrieve pixels as a 3D numpy array
-        pixels = await client.screenshot()
-        # Save as PNG using PIL/pillow
-        image = Image.fromarray(pixels)
-        outfile = io.BytesIO()
-        image.save(outfile, format='PNG')
-        imgdata = outfile.getbuffer()
-        if imgdata:
-            draw_node(node, imgdata, '', '', cwidth, cheight)
+async def do_vnc(node, url, cwidth, cheight, streaming=False):
+    keeprunning = True
+    retries = 5
+    while keeprunning:
+        try:
+            async with asyncvnc.connect(url, opener=my_opener) as client:
+                while True:
+                    # Retrieve pixels as a 3D numpy array
+                    try:
+                        # replace the stock screenshot function with our own
+                        # ask for a video refresh, then do reads until the video is complete
+                        # stock screenshot function discards data,
+                        # or we just patch the screenshot instead....
+                        # but OpenBMC sends an alpha heavy mouse overlay
+                        # that results in blackness
+                        # possibly use client side cursor to suppress the ick?
+                        pixels = await asyncio.wait_for(client.screenshot(), 4)
+                    except asyncio.TimeoutError:
+                        # need a better closed connection detector, a static screen triggers timeouts too
+                        # without the timeout, we lose track of proxmox reset
+                        # with the timeout, we falsely assume dead on stale
+                        break
+                    retries = 5
+                    # Save as PNG using PIL/pillow
+                    image = Image.fromarray(pixels)
+                    outfile = io.BytesIO()
+                    image.save(outfile, format='PNG')
+                    imgdata = outfile.getbuffer()
+                    if imgdata:
+                        draw_node(node, imgdata, '', '', cwidth, cheight)
+                    if not streaming:
+                        keeprunning = False
+                        break
+                    await asyncio.sleep(0)
+        except ValueError as e:
+            draw_node(node, None, str(e), '', cwidth, cheight)
+            retries -= 1
+            if retries <= 0:
+                keeprunning = False
+                sys.stderr.write(f'VNC connection for node {node} failed with error: {e}\n')
+            await asyncio.sleep(1)
+
 
 def draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight):
     imagedatabynode[node] = imgdata
@@ -549,10 +601,10 @@ def draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight):
         sys.stdout.write('\n')
     sys.stdout.flush()
 
-if options.screenshot:
+if options.screenshot or options.video:
     try:
         cursor_hide()
-        do_screenshot()
+        asyncio.run(do_screenshot(options.video))
     except KeyboardInterrupt:
         pass
     finally:
