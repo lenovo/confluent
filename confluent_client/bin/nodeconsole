@@ -530,7 +530,7 @@ async def do_vnc(node, url, cwidth, cheight, streaming=False):
     retries = 5
     while keeprunning:
         try:
-            async with vnc.VNCClient.create(url) as client:
+            async with await vnc.VNCClient.create(url) as client:
                 while True:
                     # Retrieve pixels as a 3D numpy array
                     try:
