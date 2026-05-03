@@ -1,6 +1,7 @@
 import asyncio
 from PIL import Image
 import io
+import numpy as np
 import zlib
 
 # This results in an RGBA organization of pixels
@@ -12,7 +13,7 @@ MYPIXFORMAT = bytearray([
     0, 255,  # red max
     0, 255,  # green max
     0, 255,  # blue max
-    0, 8, 16,     # red shift, green shift, blue shift
+    16, 8, 0,     # red shift, green shift, blue shift
     0, 0, 0       # padding
 ])
 
@@ -21,7 +22,7 @@ class ByteStream:
         self.buffer = b''
 
     def add_number(self, number, num_bytes):
-        data = number.to_bytes(num_bytes, byteorder='big')
+        data = number.to_bytes(num_bytes, byteorder='big', signed=True)
         self.buffer += data
 
     def extend(self, data):
@@ -72,10 +73,10 @@ class VNCClient:
     
     async def _read_number(self, num_bytes):
         data = await self.reader.readexactly(num_bytes)
-        return int.from_bytes(data, byteorder='big')
+        return int.from_bytes(data, byteorder='big', signed=True)
 
     def _write_number(self, number, num_bytes):
-        data = number.to_bytes(num_bytes, byteorder='big')
+        data = number.to_bytes(num_bytes, byteorder='big', signed=True)
         self.writer.write(data)
         return data
 
@@ -126,10 +127,11 @@ class VNCClient:
         self.receiver = asyncio.create_task(self._receive_loop())
         payload.add_number(2, 1)  # Set encodings
         payload.add_number(0, 1)  # Padding
-        payload.add_number(2, 2)  # Number of encodings
+        payload.add_number(4, 2)  # Number of encodings
         payload.add_number(6, 4)  # zlib
         payload.add_number(7, 4)  # tight
-        #payload.add_number(-223, 4) # desktopsize
+        payload.add_number(-223, 4) # desktopsize
+        payload.add_number(-308, 4) # extended desktopsize
         payload.flush(self.writer)
         self._request_screen_update(incremental=False)
     
@@ -189,22 +191,19 @@ class VNCClient:
             pixel_data = self.decompressor.decompress(compressed_data)
         elif encoding_type == 0:
             pixel_data = await self.reader.readexactly(width * height * 4)  # Assuming 32 bits per pixel
-        if encoding_type == -223:  # desktopsize
+        if encoding_type in (-223, -308):  # desktopsize
             self.width = width
             self.height = height
             self.framebuffer = Image.new('RGBA', (self.width, self.height))
+            if encoding_type == -308:
+                nscreens = await self._read_number(1)
+                _ = await self._read_number(3)  # padding
+                for _ in range(nscreens):
+                    _ = await self.reader.readexactly(16)  # screen info        
         elif pixel_data:
-            pixel_data = bytearray(pixel_data)
-            for i in range(3, len(pixel_data), 4):
-                pixel_data[i] = 0xff
-            img = Image.frombytes('RGBA', (width, height), bytes(pixel_data))
-            self.framebuffer.paste(img, (x, y))
-        elif encoding_type == 6:  # zlib
-            compressed_data_length = await self._read_number(4)
-            compressed_data = await self.reader.readexactly(compressed_data_length)
-            # Decompress the data using zlib and store it in the framebuffer
-            pixel_data = self.decompressor.decompress(compressed_data)
-            img = Image.frombytes('RGBA', (width, height), pixel_data)
+            pixel_data = np.frombuffer(pixel_data, dtype=np.uint8).reshape((height, width, 4)).copy()
+            pixel_data[:, :, 3] = 0xff
+            img = Image.fromarray(pixel_data, 'RGBA')
             self.framebuffer.paste(img, (x, y))
         elif encoding_type == 7:  # tight
             # Best document I could see was:
