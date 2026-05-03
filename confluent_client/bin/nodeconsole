@@ -505,7 +505,7 @@ async def do_screenshot(streaming=False):
                 url = res.get('item', {}).get('href')
                 if url:
                     urlbynode[node] = url
-        await grab_vncs(urlbynode, cwidth, cheight, streaming)
+        await grab_vncs(urlbynode, streaming)
         if resized:
             do_resize(True)
             resized = False
@@ -518,14 +518,14 @@ async def do_screenshot(streaming=False):
 
 import asyncio
 
-async def grab_vncs(urlbynode, cwidth, cheight, streaming=False):
+async def grab_vncs(urlbynode, streaming=False):
     tasks = []
     for node in urlbynode:
         url = urlbynode[node]
-        tasks.append(asyncio.create_task(do_vnc(node, url, cwidth, cheight, streaming)))
+        tasks.append(asyncio.create_task(do_vnc(node, url, streaming)))
     await asyncio.gather(*tasks)
 
-async def do_vnc(node, url, cwidth, cheight, streaming=False):
+async def do_vnc(node, url, streaming=False):
     keeprunning = True
     retries = 5
     while keeprunning:
