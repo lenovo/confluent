@@ -104,6 +104,8 @@ argparser.add_option('-w','--windowed', action='store_true', default=False,
 oldtcattr = None
 oldfl = None
 
+streaming = False
+
 def get_coords():
     sys.stdout.write('\x1b[6n') #
     sys.stdout.flush()
@@ -115,17 +117,30 @@ def get_coords():
         coords = response.replace('R', '').split('[')[1].split(';')
     #sys.stdout.write('\x1b[{}:{}H'.format(*coords))
 
+console_direct_mode = False
 def direct_console():
+    global console_direct_mode
     global oldtcattr
     global oldfl
+    if console_direct_mode:
+        return False
+    console_direct_mode = True
     oldtcattr = termios.tcgetattr(sys.stdin.fileno())
     oldfl = fcntl.fcntl(sys.stdin.fileno(), fcntl.F_GETFL)
     tty.setraw(sys.stdin.fileno())
-    fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, oldfl | os.O_NONBLOCK)
+    #fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, oldfl | os.O_NONBLOCK)
+    return True
 
 def indirect_console():
-    fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, oldfl & ~os.O_NONBLOCK)
+    global console_direct_mode
+    global oldtcattr
+    global oldfl
+    if not console_direct_mode:
+        return False
+    console_direct_mode = False
+    #fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, oldfl & ~os.O_NONBLOCK)
     termios.tcsetattr(sys.stdin.fileno(), termios.TCSANOW, oldtcattr)
+    return True
 
 def determine_tile_size(numnodes):
     # for now, smash everything to a common aspect ratio.  16:11
@@ -137,9 +152,10 @@ def determine_tile_size(numnodes):
     # from kitty by omitting, but:
     # then we don't know how much to move the cursor left after draw_image
     # Konsole won't scale at all with only partial scaling specified
-    direct_console()
+    directed = direct_console()
     cheight, cwidth, pixwidth, pixheight = sq.get_screengeom(escfallback=True)
-    indirect_console()
+    if directed:
+        indirect_console()
     # 16:12 is to roughly account for the 'titles' of the tiles
     ratio = (pixwidth / 16) / (pixheight / 12)
     bestdeviation = None
@@ -187,19 +203,22 @@ cursor_saved = False
 def sticky_cursor():
     global cursor_saved
 # get cursor restore_position
+    directed = False
     if sys.stdin.isatty() and not cursor_saved:
         try:
-            direct_console()
+            directed = direct_console()
             sys.stdout.write('\x1b7')
             cursor_saved = True
         finally:
-            indirect_console()
+            if directed:
+                indirect_console()
     elif cursor_saved:
         try:
-            direct_console()
+            directed = direct_console()
             sys.stdout.write('\x1b8')
         finally:
-            indirect_console()
+            if directed:
+                indirect_console()
 
 def cursor_up(count=1):
     sys.stdout.write(f'\x1b[{count}A')
@@ -219,9 +238,10 @@ def cursor_show():
     sys.stdout.write('\x1b[?25h')
 
 def get_pix_dimensions(width, height):
-    direct_console()
+    directed = direct_console()
     cheight, cwidth, pixwidth, pixheight = sq.get_screengeom(escfallback=True)
-    indirect_console()
+    if directed:
+        indirect_console()
     imgwidth = int(pixwidth / cwidth * width)
     imgheight = int(pixheight / cheight * height)
     return imgwidth, imgheight
@@ -339,6 +359,7 @@ def kitty_draw(bindata, width, height):
         sys.stdout.write('\x1b\\')
         sys.stdout.flush()
 
+
 pass_through_args = []
 killcon = False
 try:
@@ -382,7 +403,11 @@ def prep_node_tile(node):
         cursor_right(currcolcell)
     if currrowcell:
         cursor_down(currrowcell)
+    if node in focused_nodes:
+        sys.stdout.write('\x1b[44m')    
     sys.stdout.write('▏' + node)
+    if node in focused_nodes:
+        sys.stdout.write('\x1b[0m')
     cursor_left(len(node) + 1)
     cursor_down()
 
@@ -421,7 +446,8 @@ def redraw():
         sys.stdout.flush()
 resized = False
 
-async def do_screenshot(streaming=False):
+async def do_screenshot():
+    global streaming
     global resized
     global numrows
     sess = client.Command()
@@ -505,7 +531,7 @@ async def do_screenshot(streaming=False):
                 url = res.get('item', {}).get('href')
                 if url:
                     urlbynode[node] = url
-        await grab_vncs(urlbynode, streaming)
+        await grab_vncs(urlbynode)
         if resized:
             do_resize(True)
             resized = False
@@ -518,14 +544,114 @@ async def do_screenshot(streaming=False):
 
 import asyncio
 
-async def grab_vncs(urlbynode, streaming=False):
+async def grab_vncs(urlbynode):
+    global streaming
     tasks = []
-    for node in urlbynode:
-        url = urlbynode[node]
-        tasks.append(asyncio.create_task(do_vnc(node, url, streaming)))
-    await asyncio.gather(*tasks)
+    directed = False
+    try:
+        if streaming:
+            directed = direct_console()
+        for node in urlbynode:
+            url = urlbynode[node]
+            tasks.append(asyncio.create_task(do_vnc(node, url)))
+        await asyncio.gather(*tasks)
+    except Exception as e:
+        sys.stderr.write(f"Error in grab_vncs: {e}\n")
+    finally:
+        if directed:
+            indirect_console()
 
-async def do_vnc(node, url, streaming=False):
+conserversequence = '\05c'
+
+async def relay_keypress(key):
+    # Implement the logic for relaying the keypress asynchronously
+    pass
+
+def get_command_sequence(nbytes, timeout=3):
+    seq = ''
+    fd = sys.stdin.fileno()
+    start_time = time.time()
+    deadline = start_time + timeout
+    while len(seq) < nbytes and (time.time() - start_time) < timeout:
+        if sys.stdin in select.select([sys.stdin], [], [], deadline - time.time())[0]:
+            chunk = os.read(fd, 1).decode('utf-8', errors='ignore')
+            seq += chunk
+    return seq
+
+single_focus_node = None
+focused_nodes = {}
+def init_focus(node):
+    global single_focus_node
+    if not focused_nodes:
+        focused_nodes[node] = True
+        single_focus_node = node
+
+def move_focus(direction):
+    # Implement the logic to move focus in the specified direction
+    sys.stderr.write("Move focus: {}\n".format(direction))
+def toggle_focus_all():
+    # Implement the logic to toggle focus all
+    if len(focused_nodes) < 2:
+        for node in nodepositions:
+            focused_nodes[node] = True
+        return
+    for node in list(focused_nodes):
+        if node == single_focus_node:
+            continue
+        del focused_nodes[node]
+
+async def check_keypress(node):
+    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        key = os.read(sys.stdin.fileno(), 1).decode('utf-8', errors='ignore')
+        if key == '\x05':  # Ctrl-E
+            return await handle_command_sequence()
+        await relay_keypress(key)
+
+async def handle_command_sequence():
+
+    seq = get_command_sequence(1)
+    if seq != 'c':
+        # Not a conserver command sequence, relay the initial key and any additional keys
+        await relay_keypress('\x05')
+        for k in seq:
+            await relay_keypress(k)
+        return
+    cmd = get_command_sequence(1)
+    if cmd == '?':  # Ctrl-E, then c, then ?
+        sys.stdout.write('Command sequences:\n')
+        sys.stdout.write('Ctrl-E, then c, then .: Exit console\n')
+        sys.stdout.write('Ctrl-E, then c, then fa: Toggle focus all\n')
+        sys.stdout.write('Ctrl-E, then c, then arrow keys: Move focus\n')
+        sys.stdout.write('Ctrl-E, then c, then ?: Show this help message\n')
+        sys.stdout.flush()
+        return True
+    if cmd == '.':  # Ctrl-E, then c, then .
+        indirect_console()
+        sys.exit(0)
+    if cmd == 'f':
+        subcmd = get_command_sequence(1)
+        if subcmd == 'a':  # Ctrl-E, then c, then fa
+            # Implement focus all toggle logic here
+            toggle_focus_all()
+            return
+    if cmd == '\x1b':  # Ctrl-E, then c, then f, then ESC
+        while cmd == '\x1b':
+            cursor_cmd = get_command_sequence(2, 0.2)
+            if cursor_cmd == '[A':  # Up arrow
+                move_focus('up')
+            elif cursor_cmd == '[B':  # Down arrow
+                move_focus('down')
+            elif cursor_cmd == '[C':  # Right arrow
+                move_focus('right')
+            elif cursor_cmd == '[D':  # Left arrow
+                move_focus('left')
+            else:
+                break
+            cmd = get_command_sequence(1)
+        return
+
+async def do_vnc(node, url):
+    global streaming
     keeprunning = True
     retries = 5
     while keeprunning:
@@ -554,7 +680,10 @@ async def do_vnc(node, url, streaming=False):
                     imgdata = outfile.getbuffer()
                     if imgdata:
                         draw_node(node, imgdata, '', '', cwidth, cheight)
-                    if not streaming:
+                    if streaming:
+                        init_focus(node)
+                        await check_keypress(node)
+                    else:
                         keeprunning = False
                         break
         except ValueError as e:
@@ -591,9 +720,10 @@ def draw_node(node, imgdata, errorstr, firstnodename, cwidth, cheight):
     sys.stdout.flush()
 
 if options.screenshot or options.video:
+    streaming = options.video
     try:
         cursor_hide()
-        asyncio.run(do_screenshot(options.video))
+        asyncio.run(do_screenshot())
     except KeyboardInterrupt:
         pass
     finally:
